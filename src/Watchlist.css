@@ -1,0 +1,169 @@
+.tv-watchlist {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: #131722;
+  color: #d1d4dc;
+}
+
+.tv-watchlist__toolbar {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid #2a2e39;
+}
+
+.tv-watchlist__title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.tv-watchlist__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin: 8px 10px;
+  padding: 0 8px;
+  height: 28px;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  background: #1e222d;
+}
+
+.tv-watchlist__search-icon {
+  display: flex;
+  color: #787b86;
+}
+
+.tv-watchlist__search input {
+  width: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #d1d4dc;
+  font: inherit;
+  font-size: 12px;
+}
+
+.tv-watchlist__search input::placeholder {
+  color: #787b86;
+}
+
+.tv-watchlist__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px 64px;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-bottom: 1px solid #2a2e39;
+  color: #787b86;
+  font-size: 11px;
+}
+
+.tv-watchlist__columns span:nth-child(2),
+.tv-watchlist__columns span:nth-child(3) {
+  text-align: right;
+}
+
+.tv-watchlist__rows {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.tv-watchlist__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px 64px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 12px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tv-watchlist__row:hover {
+  background: #1e222d;
+}
+
+.tv-watchlist__row.is-selected {
+  background: #2a2e39;
+  border-left-color: #2962ff;
+}
+
+.tv-watchlist__row.is-up:not(.is-selected) {
+  background: rgba(8, 153, 129, 0.08);
+}
+
+.tv-watchlist__row.is-down:not(.is-selected) {
+  background: rgba(242, 54, 69, 0.08);
+}
+
+.tv-watchlist__row.is-selected.is-up {
+  background: rgba(8, 153, 129, 0.16);
+}
+
+.tv-watchlist__row.is-selected.is-down {
+  background: rgba(242, 54, 69, 0.16);
+}
+
+.tv-watchlist__symbol {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tv-watchlist__ticker {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tv-watchlist__name {
+  overflow: hidden;
+  color: #787b86;
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tv-watchlist__last,
+.tv-watchlist__change {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tv-watchlist__last.is-up,
+.tv-watchlist__change.is-up {
+  color: #089981;
+}
+
+.tv-watchlist__last.is-down,
+.tv-watchlist__change.is-down {
+  color: #f23645;
+}
+
+.tv-watchlist__empty {
+  margin: 0;
+  padding: 16px 12px;
+  color: #787b86;
+  font-size: 12px;
+}

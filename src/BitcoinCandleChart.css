@@ -1,0 +1,220 @@
+.bitcoin-chart {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.bitcoin-chart__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: #d1d4dc;
+  border-bottom: 1px solid #2a2e39;
+}
+
+.bitcoin-chart__title {
+  white-space: nowrap;
+}
+
+.bitcoin-chart__timeframes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.bitcoin-chart__timeframe {
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #868993;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bitcoin-chart__timeframe:hover {
+  color: #d1d4dc;
+  background: #2a2e39;
+}
+
+.bitcoin-chart__timeframe.is-active {
+  color: #d1d4dc;
+  border-color: #2a2e39;
+  background: #2a2e39;
+}
+
+.bitcoin-chart__error {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #ef5350;
+}
+
+.bitcoin-chart__canvas {
+  flex: 1;
+  min-height: 0;
+}
+
+.bitcoin-chart__viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.bitcoin-chart__viewport .bitcoin-chart__canvas {
+  height: 100%;
+}
+
+.bitcoin-chart__indicator-gear {
+  position: absolute;
+  right: 16px;
+  bottom: 86px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  background: rgba(30, 34, 45, 0.92);
+  color: #d1d4dc;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms ease, background 120ms ease;
+  z-index: 4;
+}
+
+.bitcoin-chart__viewport:hover .bitcoin-chart__indicator-gear,
+.bitcoin-chart__viewport:focus-within .bitcoin-chart__indicator-gear,
+.bitcoin-chart__indicator-gear:focus-visible {
+  opacity: 1;
+}
+
+.bitcoin-chart__indicator-gear:hover {
+  background: #363a45;
+}
+
+.bitcoin-chart__settings {
+  position: absolute;
+  right: 12px;
+  bottom: 116px;
+  width: 260px;
+  padding: 12px;
+  border: 1px solid #2a2e39;
+  border-radius: 8px;
+  background: rgba(19, 23, 34, 0.96);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 4;
+}
+
+.bitcoin-chart__settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bitcoin-chart__settings-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #aab0bc;
+}
+
+.bitcoin-chart__settings-grid label span {
+  white-space: nowrap;
+}
+
+.bitcoin-chart__settings-grid input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  background: #1e222d;
+  color: #d1d4dc;
+  font: inherit;
+  font-size: 12px;
+}
+
+.bitcoin-chart__settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.bitcoin-chart__settings-button {
+  padding: 6px 10px;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  background: #1e222d;
+  color: #d1d4dc;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bitcoin-chart__settings-button:hover {
+  background: #2a2e39;
+}
+
+.bitcoin-chart__settings-button--primary {
+  border-color: #2962ff;
+  background: #2962ff;
+  color: #fff;
+}
+
+.bitcoin-chart__settings-button--primary:hover {
+  background: #1f4ed8;
+}
+
+.bitcoin-chart__controls {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: opacity 120ms ease;
+  z-index: 3;
+}
+
+.bitcoin-chart__viewport:hover .bitcoin-chart__controls,
+.bitcoin-chart__viewport:focus-within .bitcoin-chart__controls {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.bitcoin-chart__control {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  background: #2a2e39;
+  color: #d1d4dc;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.bitcoin-chart__control:hover {
+  background: #363a45;
+}
+
+.bitcoin-chart__control--reset {
+  min-width: 28px;
+}

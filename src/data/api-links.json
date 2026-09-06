@@ -1,0 +1,8 @@
+{
+  "binanceKlines": "https://api.binance.com/api/v3/klines",
+  "binanceTicker24hr": "https://api.binance.com/api/v3/ticker/24hr",
+  "binanceKlineStream": "wss://stream.binance.com:9443/ws",
+  "binanceTickerStream": "wss://stream.binance.com:9443/ws/!ticker@arr",
+  "binanceBookTickerStream": "wss://stream.binance.com:9443/ws/!bookTicker",
+  "binanceCombinedStream": "wss://stream.binance.com:9443/stream?streams="
+}

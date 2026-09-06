@@ -1,4 +1,4 @@
-import type { BitcoinCandle } from './bitcoinCandles'
+import type { Candle } from '../../candles'
 
 export const RSI_LENGTH = 14
 
@@ -34,7 +34,7 @@ function rma(values: number[], length: number): Array<number | null> {
 }
 
 export function calculateTradingViewRsi(
-  candles: BitcoinCandle[],
+  candles: Candle[],
   length = RSI_LENGTH,
 ): RsiPoint[] {
   if (candles.length < length + 1) {

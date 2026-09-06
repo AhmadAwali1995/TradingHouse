@@ -1,3 +1,5 @@
+import { getApiLink, type Pair } from './data/config'
+
 export const TIMEFRAMES = [
   { id: '15m', label: '15m' },
   { id: '30m', label: '30m' },
@@ -10,7 +12,7 @@ export const TIMEFRAMES = [
 
 export type TimeframeId = (typeof TIMEFRAMES)[number]['id']
 
-export type BitcoinCandle = {
+export type Candle = {
   time: number
   open: number
   high: number
@@ -50,10 +52,10 @@ const TARGET_BARS: Record<TimeframeId, number> = {
 const PAGE_SIZE = 1000
 
 function aggregateCandles(
-  candles: BitcoinCandle[],
+  candles: Candle[],
   periodSeconds: number,
-): BitcoinCandle[] {
-  const buckets = new Map<number, BitcoinCandle>()
+): Candle[] {
+  const buckets = new Map<number, Candle>()
 
   for (const candle of candles) {
     const time = Math.floor(candle.time / periodSeconds) * periodSeconds
@@ -78,7 +80,7 @@ function aggregateCandles(
   return [...buckets.values()]
 }
 
-function parseKlines(klines: BinanceKline[]): BitcoinCandle[] {
+function parseKlines(klines: BinanceKline[]): Candle[] {
   return klines.map((kline) => ({
     time: Math.floor(kline[0] / 1000),
     open: Number(kline[1]),
@@ -89,16 +91,18 @@ function parseKlines(klines: BinanceKline[]): BitcoinCandle[] {
 }
 
 async function fetchKlinePages(
+  pair: Pair,
   interval: string,
   targetCount: number,
   signal?: AbortSignal,
-): Promise<BitcoinCandle[]> {
-  const candles: BitcoinCandle[] = []
+): Promise<Candle[]> {
+  const candles: Candle[] = []
   let endTime: number | undefined
+  const endpoint = getApiLink(pair.api)
 
   while (candles.length < targetCount) {
     const params = new URLSearchParams({
-      symbol: 'BTCUSDT',
+      symbol: pair.symbol,
       interval,
       limit: String(PAGE_SIZE),
     })
@@ -107,13 +111,10 @@ async function fetchKlinePages(
       params.set('endTime', String(endTime))
     }
 
-    const response = await fetch(
-      `https://api.binance.com/api/v3/klines?${params.toString()}`,
-      { signal },
-    )
+    const response = await fetch(`${endpoint}?${params.toString()}`, { signal })
 
     if (!response.ok) {
-      throw new Error(`Failed to load Bitcoin candles (${response.status})`)
+      throw new Error(`Failed to load ${pair.name} candles (${response.status})`)
     }
 
     const page = parseKlines((await response.json()) as BinanceKline[])
@@ -130,7 +131,7 @@ async function fetchKlinePages(
     endTime = page[0].time * 1000 - 1
   }
 
-  const unique = new Map<number, BitcoinCandle>()
+  const unique = new Map<number, Candle>()
   for (const candle of candles) {
     unique.set(candle.time, candle)
   }
@@ -140,14 +141,62 @@ async function fetchKlinePages(
     .slice(-targetCount)
 }
 
-export async function fetchBitcoinCandles(
+export function getBinanceInterval(timeframe: TimeframeId): string {
+  return BINANCE_INTERVAL[timeframe]
+}
+
+export function applyLiveCandle(candles: Candle[], candle: Candle): boolean {
+  const lastIndex = candles.length - 1
+  const last = candles[lastIndex]
+
+  if (last && last.time === candle.time) {
+    candles[lastIndex] = candle
+    return true
+  }
+
+  if (!last || candle.time > last.time) {
+    candles.push(candle)
+    return true
+  }
+
+  return false
+}
+
+export function mergeIntoBucket(
+  current: Candle | undefined,
+  candle: Candle,
+  periodSeconds: number,
+): Candle {
+  const time = Math.floor(candle.time / periodSeconds) * periodSeconds
+
+  if (!current || current.time !== time) {
+    return {
+      time,
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+    }
+  }
+
+  return {
+    time,
+    open: current.open,
+    high: Math.max(current.high, candle.high),
+    low: Math.min(current.low, candle.low),
+    close: candle.close,
+  }
+}
+
+export async function fetchCandles(
+  pair: Pair,
   timeframe: TimeframeId,
   signal?: AbortSignal,
-): Promise<BitcoinCandle[]> {
+): Promise<Candle[]> {
   const interval = BINANCE_INTERVAL[timeframe]
   const target =
     timeframe === '45m' ? TARGET_BARS[timeframe] * 3 : TARGET_BARS[timeframe]
-  const candles = await fetchKlinePages(interval, target, signal)
+  const candles = await fetchKlinePages(pair, interval, target, signal)
 
   if (timeframe === '45m') {
     return aggregateCandles(candles, 45 * 60).slice(-TARGET_BARS[timeframe])

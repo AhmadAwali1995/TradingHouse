@@ -1,0 +1,58 @@
+[
+  {
+    "id": "bitcoin",
+    "name": "Bitcoin",
+    "symbol": "BTCUSDT",
+    "baseAsset": "BTC",
+    "quoteAsset": "USDT",
+    "api": "binanceKlines"
+  },
+  {
+    "id": "ethereum",
+    "name": "Ethereum",
+    "symbol": "ETHUSDT",
+    "baseAsset": "ETH",
+    "quoteAsset": "USDT",
+    "api": "binanceKlines"
+  },
+  {
+    "id": "solana",
+    "name": "Solana",
+    "symbol": "SOLUSDT",
+    "baseAsset": "SOL",
+    "quoteAsset": "USDT",
+    "api": "binanceKlines"
+  },
+  {
+    "id": "bnb",
+    "name": "BNB",
+    "symbol": "BNBUSDT",
+    "baseAsset": "BNB",
+    "quoteAsset": "USDT",
+    "api": "binanceKlines"
+  },
+  {
+    "id": "xrp",
+    "name": "XRP",
+    "symbol": "XRPUSDT",
+    "baseAsset": "XRP",
+    "quoteAsset": "USDT",
+    "api": "binanceKlines"
+  },
+  {
+    "id": "avalanche",
+    "name": "Avalanche",
+    "symbol": "AVAXUSDT",
+    "baseAsset": "AVAX",
+    "quoteAsset": "USDT",
+    "api": "binanceKlines"
+  },
+  {
+    "id": "chainlink",
+    "name": "Chainlink",
+    "symbol": "LINKUSDT",
+    "baseAsset": "LINK",
+    "quoteAsset": "USDT",
+    "api": "binanceKlines"
+  }
+]

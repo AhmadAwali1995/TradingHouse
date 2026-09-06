@@ -1,0 +1,811 @@
+import { useEffect, useRef, useState } from 'react'
+import {
+  BaselineSeries,
+  CandlestickSeries,
+  ColorType,
+  createChart,
+  LineSeries,
+  LineStyle,
+  type IChartApi,
+  type ISeriesApi,
+  type UTCTimestamp,
+} from 'lightweight-charts'
+import {
+  TIMEFRAMES,
+  applyLiveCandle,
+  fetchCandles,
+  type Candle,
+  type TimeframeId,
+} from './candles'
+import type { Pair } from './data/config'
+import { RSI_LENGTH, calculateTradingViewRsi } from './indicators'
+import { subscribeLiveCandles } from './klineSocket'
+import './BitcoinCandleChart.css'
+
+type LogicalRange = {
+  from: number
+  to: number
+}
+
+type RsiSettings = {
+  length: number
+  outerHigh: number
+  upperBand: number
+  midline: number
+  lowerBand: number
+  outerLow: number
+}
+
+const DEFAULT_RSI_SETTINGS: RsiSettings = {
+  length: RSI_LENGTH,
+  outerHigh: 80,
+  upperBand: 70,
+  midline: 50,
+  lowerBand: 30,
+  outerLow: 20,
+}
+
+type RsiPoint = {
+  time: number
+  value: number
+}
+
+type ChartLinePoint = {
+  time: UTCTimestamp
+  value?: number
+}
+
+function interpolateThresholdPoint(
+  left: RsiPoint,
+  right: RsiPoint,
+  threshold: number,
+): RsiPoint {
+  const delta = right.value - left.value
+  if (delta === 0) {
+    return { time: left.time, value: threshold }
+  }
+
+  const ratio = (threshold - left.value) / delta
+  return {
+    time: left.time + (right.time - left.time) * ratio,
+    value: threshold,
+  }
+}
+
+function samePoint(left: ChartLinePoint, right: ChartLinePoint): boolean {
+  return left.time === right.time && left.value === right.value
+}
+
+function buildZoneSeries(
+  points: RsiPoint[],
+  thresholds: number[],
+  isInsideZone: (value: number) => boolean,
+): ChartLinePoint[] {
+  const data: ChartLinePoint[] = []
+
+  const pushPoint = (point: ChartLinePoint) => {
+    const last = data[data.length - 1]
+    if (!last || !samePoint(last, point)) {
+      data.push(point)
+    }
+  }
+
+  const pushGap = (time: number) => {
+    const gap = { time: time as UTCTimestamp }
+    const last = data[data.length - 1]
+    if (!last || last.value !== undefined) {
+      data.push(gap)
+    }
+  }
+
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1]
+    const current = points[index]
+    const segmentPoints = [previous]
+
+    for (const threshold of thresholds) {
+      const leftDistance = previous.value - threshold
+      const rightDistance = current.value - threshold
+      if (leftDistance === 0 || rightDistance === 0 || leftDistance * rightDistance >= 0) {
+        continue
+      }
+      segmentPoints.push(interpolateThresholdPoint(previous, current, threshold))
+    }
+
+    segmentPoints.push(current)
+    segmentPoints.sort((left, right) => left.time - right.time)
+
+    for (let splitIndex = 1; splitIndex < segmentPoints.length; splitIndex += 1) {
+      const left = segmentPoints[splitIndex - 1]
+      const right = segmentPoints[splitIndex]
+      const middleValue = (left.value + right.value) / 2
+
+      if (!isInsideZone(middleValue)) {
+        pushGap(right.time)
+        continue
+      }
+
+      pushPoint({ time: left.time as UTCTimestamp, value: left.value })
+      pushPoint({ time: right.time as UTCTimestamp, value: right.value })
+    }
+  }
+
+  return data
+}
+
+function normalizeRsiSettings(settings: RsiSettings): RsiSettings {
+  const outerLow = Math.max(0, Math.min(100, settings.outerLow))
+  const lowerBand = Math.max(outerLow, Math.min(100, settings.lowerBand))
+  const midline = Math.max(lowerBand, Math.min(100, settings.midline))
+  const upperBand = Math.max(midline, Math.min(100, settings.upperBand))
+  const outerHigh = Math.max(upperBand, Math.min(100, settings.outerHigh))
+
+  return {
+    length: Math.max(1, Math.round(settings.length)),
+    outerHigh,
+    upperBand,
+    midline,
+    lowerBand,
+    outerLow,
+  }
+}
+
+function centerLastCandle(chart: IChartApi, candleCount: number, onCentered?: (range: LogicalRange) => void) {
+  if (candleCount <= 0) {
+    return
+  }
+
+  const timeScale = chart.timeScale()
+  const lastIndex = candleCount - 1
+
+  const applyCenter = () => {
+    const range = timeScale.getVisibleLogicalRange()
+    if (!range) {
+      return
+    }
+
+    const width = range.to - range.from
+    const halfWidth = width / 2
+    const centered = {
+      from: lastIndex - halfWidth,
+      to: lastIndex + halfWidth,
+    }
+    timeScale.setVisibleLogicalRange(centered)
+    onCentered?.(centered)
+  }
+
+  requestAnimationFrame(() => {
+    applyCenter()
+    requestAnimationFrame(applyCenter)
+  })
+}
+
+export function BitcoinCandleChart({ pair }: { pair: Pair }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<IChartApi | null>(null)
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const rsiSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const rsiBandTopRef = useRef<ISeriesApi<'Baseline'> | null>(null)
+  const rsiBandBottomRef = useRef<ISeriesApi<'Baseline'> | null>(null)
+  const rsiMidUpRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const rsiMidDownRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const rsiWhiteRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const rsiUpperRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const rsiLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const initialRangeRef = useRef<LogicalRange | null>(null)
+  const [timeframe, setTimeframe] = useState<TimeframeId>('1h')
+  const [chartReady, setChartReady] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [rsiSettings, setRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
+  const [draftRsiSettings, setDraftRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
+
+  const shiftRange = (direction: -1 | 1) => {
+    const chart = chartRef.current
+    const range = chart?.timeScale().getVisibleLogicalRange()
+    if (!chart || !range) {
+      return
+    }
+
+    const width = range.to - range.from
+    const step = Math.max(width * 0.2, 1)
+    chart.timeScale().setVisibleLogicalRange({
+      from: range.from + direction * step,
+      to: range.to + direction * step,
+    })
+  }
+
+  const zoomRange = (factor: number) => {
+    const chart = chartRef.current
+    const range = chart?.timeScale().getVisibleLogicalRange()
+    if (!chart || !range) {
+      return
+    }
+
+    const center = (range.from + range.to) / 2
+    const nextWidth = Math.max((range.to - range.from) * factor, 10)
+    const halfWidth = nextWidth / 2
+    chart.timeScale().setVisibleLogicalRange({
+      from: center - halfWidth,
+      to: center + halfWidth,
+    })
+  }
+
+  const resetView = () => {
+    const chart = chartRef.current
+    const initialRange = initialRangeRef.current
+    const series = seriesRef.current
+    const rsiSeries = rsiSeriesRef.current
+    if (!chart || !initialRange || !series || !rsiSeries) {
+      return
+    }
+
+    chart.timeScale().setVisibleLogicalRange(initialRange)
+    requestAnimationFrame(() => {
+      series.priceScale().applyOptions({ autoScale: true })
+      rsiSeries.priceScale().applyOptions({ autoScale: true })
+    })
+  }
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) {
+      return
+    }
+
+    const chart = createChart(container, {
+      autoSize: true,
+      layout: {
+        background: { type: ColorType.Solid, color: '#131722' },
+        textColor: '#d1d4dc',
+        fontFamily: "system-ui, 'Segoe UI', Roboto, sans-serif",
+        attributionLogo: false,
+      },
+      grid: {
+        vertLines: { color: '#1e222d' },
+        horzLines: { color: '#1e222d' },
+      },
+      rightPriceScale: {
+        borderColor: '#2a2e39',
+      },
+      timeScale: {
+        borderColor: '#2a2e39',
+        timeVisible: true,
+        secondsVisible: false,
+        minBarSpacing: 2,
+      },
+      crosshair: {
+        vertLine: { color: '#758696' },
+        horzLine: { color: '#758696' },
+      },
+    })
+
+    chartRef.current = chart
+    seriesRef.current = chart.addSeries(CandlestickSeries, {
+      upColor: '#26a69a',
+      downColor: '#ef5350',
+      borderVisible: false,
+      wickUpColor: '#26a69a',
+      wickDownColor: '#ef5350',
+    })
+
+    const rsiBandTop = chart.addSeries(
+      BaselineSeries,
+      {
+        baseValue: { type: 'price', price: rsiSettings.midline },
+        topFillColor1: 'rgba(104, 33, 122, 0.26)',
+        topFillColor2: 'rgba(104, 33, 122, 0.26)',
+        topLineColor: 'rgba(0, 0, 0, 0)',
+        bottomFillColor1: 'rgba(0, 0, 0, 0)',
+        bottomFillColor2: 'rgba(0, 0, 0, 0)',
+        bottomLineColor: 'rgba(0, 0, 0, 0)',
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      },
+      1,
+    )
+
+    const rsiBandBottom = chart.addSeries(
+      BaselineSeries,
+      {
+        baseValue: { type: 'price', price: rsiSettings.midline },
+        topFillColor1: 'rgba(0, 0, 0, 0)',
+        topFillColor2: 'rgba(0, 0, 0, 0)',
+        topLineColor: 'rgba(0, 0, 0, 0)',
+        bottomFillColor1: 'rgba(104, 33, 122, 0.26)',
+        bottomFillColor2: 'rgba(104, 33, 122, 0.26)',
+        bottomLineColor: 'rgba(0, 0, 0, 0)',
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      },
+      1,
+    )
+
+    const rsiMidUp = chart.addSeries(
+      LineSeries,
+      {
+        color: '#2db84d',
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
+        crosshairMarkerVisible: false,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      },
+      1,
+    )
+
+    const rsiMidDown = chart.addSeries(
+      LineSeries,
+      {
+        color: '#d52d35',
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
+        crosshairMarkerVisible: false,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      },
+      1,
+    )
+
+    const rsiWhite = chart.addSeries(
+      LineSeries,
+      {
+        color: '#f3f4f6',
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
+        crosshairMarkerVisible: false,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      },
+      1,
+    )
+
+    const rsiUpper = chart.addSeries(
+      LineSeries,
+      {
+        color: '#ff3b30',
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
+        crosshairMarkerVisible: false,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      },
+      1,
+    )
+
+    const rsiLower = chart.addSeries(
+      LineSeries,
+      {
+        color: '#ff3b30',
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
+        crosshairMarkerVisible: false,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      },
+      1,
+    )
+
+    const rsiSeries = chart.addSeries(
+      LineSeries,
+      {
+        color: 'rgba(243, 244, 246, 0)',
+        lineWidth: 1,
+        title: `Better RSI ${rsiSettings.length}`,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        crosshairMarkerVisible: false,
+        autoscaleInfoProvider: () => ({
+          priceRange: {
+            minValue: rsiSettings.outerLow,
+            maxValue: rsiSettings.outerHigh,
+          },
+        }),
+      },
+      1,
+    )
+
+    rsiSeries.createPriceLine({
+      price: rsiSettings.outerHigh,
+      color: '#a66a2c',
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      axisLabelVisible: true,
+      title: '',
+    })
+    rsiSeries.createPriceLine({
+      price: rsiSettings.upperBand,
+      color: '#9095a1',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: '',
+    })
+    rsiSeries.createPriceLine({
+      price: rsiSettings.midline,
+      color: '#9095a1',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: '',
+    })
+    rsiSeries.createPriceLine({
+      price: rsiSettings.lowerBand,
+      color: '#9095a1',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: '',
+    })
+    rsiSeries.createPriceLine({
+      price: rsiSettings.outerLow,
+      color: '#a66a2c',
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      axisLabelVisible: true,
+      title: '',
+    })
+
+    rsiBandTopRef.current = rsiBandTop
+    rsiBandBottomRef.current = rsiBandBottom
+    rsiMidUpRef.current = rsiMidUp
+    rsiMidDownRef.current = rsiMidDown
+    rsiWhiteRef.current = rsiWhite
+    rsiUpperRef.current = rsiUpper
+    rsiLowerRef.current = rsiLower
+    rsiSeriesRef.current = rsiSeries
+    chart.panes()[0]?.setStretchFactor(3)
+    chart.panes()[1]?.setStretchFactor(1)
+    setChartReady(true)
+
+    return () => {
+      setChartReady(false)
+      seriesRef.current = null
+      rsiSeriesRef.current = null
+      rsiBandTopRef.current = null
+      rsiBandBottomRef.current = null
+      rsiMidUpRef.current = null
+      rsiMidDownRef.current = null
+      rsiWhiteRef.current = null
+      rsiUpperRef.current = null
+      rsiLowerRef.current = null
+      chartRef.current = null
+      chart.remove()
+    }
+  }, [rsiSettings])
+
+  useEffect(() => {
+    const series = seriesRef.current
+    const rsiSeries = rsiSeriesRef.current
+    const rsiBandTop = rsiBandTopRef.current
+    const rsiBandBottom = rsiBandBottomRef.current
+    const rsiMidUp = rsiMidUpRef.current
+    const rsiMidDown = rsiMidDownRef.current
+    const rsiWhite = rsiWhiteRef.current
+    const rsiUpper = rsiUpperRef.current
+    const rsiLower = rsiLowerRef.current
+    if (
+      !series ||
+      !rsiSeries ||
+      !rsiBandTop ||
+      !rsiBandBottom ||
+      !rsiMidUp ||
+      !rsiMidDown ||
+      !rsiWhite ||
+      !rsiUpper ||
+      !rsiLower
+    ) {
+      return
+    }
+
+    const controller = new AbortController()
+    let closed = false
+    let live: ReturnType<typeof subscribeLiveCandles> | null = null
+    initialRangeRef.current = null
+    setError(null)
+
+    const paintRsi = (candles: Candle[]) => {
+      const points = calculateTradingViewRsi(candles, rsiSettings.length)
+      const bandTop = points.map((point) => ({
+        time: point.time as UTCTimestamp,
+        value: rsiSettings.upperBand,
+      }))
+      const bandBottom = points.map((point) => ({
+        time: point.time as UTCTimestamp,
+        value: rsiSettings.lowerBand,
+      }))
+      const midUp = points.map((point) =>
+        point.value >= rsiSettings.midline
+          ? { time: point.time as UTCTimestamp, value: rsiSettings.midline }
+          : { time: point.time as UTCTimestamp },
+      )
+      const midDown = points.map((point) =>
+        point.value < rsiSettings.midline
+          ? { time: point.time as UTCTimestamp, value: rsiSettings.midline }
+          : { time: point.time as UTCTimestamp },
+      )
+      const white = buildZoneSeries(
+        points,
+        [rsiSettings.lowerBand, rsiSettings.upperBand],
+        (value) => value >= rsiSettings.lowerBand && value <= rsiSettings.upperBand,
+      )
+      const upper = buildZoneSeries(
+        points,
+        [rsiSettings.lowerBand, rsiSettings.upperBand],
+        (value) => value > rsiSettings.upperBand,
+      )
+      const lower = buildZoneSeries(
+        points,
+        [rsiSettings.lowerBand, rsiSettings.upperBand],
+        (value) => value < rsiSettings.lowerBand,
+      )
+
+      rsiBandTop.setData(bandTop)
+      rsiBandBottom.setData(bandBottom)
+      rsiMidUp.setData(midUp)
+      rsiMidDown.setData(midDown)
+      rsiWhite.setData(white)
+      rsiUpper.setData(upper)
+      rsiLower.setData(lower)
+      rsiSeries.setData(
+        points.map((point) => ({
+          time: point.time as UTCTimestamp,
+          value: point.value,
+        })),
+      )
+    }
+
+    const paintHistory = (candles: Candle[]) => {
+      series.setData(
+        candles.map((candle) => ({
+          time: candle.time as UTCTimestamp,
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+        })),
+      )
+      paintRsi(candles)
+    }
+
+    const paintLive = (candles: Candle[], candle: Candle) => {
+      series.update({
+        time: candle.time as UTCTimestamp,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+      })
+      paintRsi(candles)
+    }
+
+    void fetchCandles(pair, timeframe, controller.signal)
+      .then((history) => {
+        if (
+          closed ||
+          controller.signal.aborted ||
+          seriesRef.current !== series ||
+          rsiSeriesRef.current !== rsiSeries
+        ) {
+          return
+        }
+
+        const candles = [...history]
+        paintHistory(candles)
+        chartRef.current?.timeScale().fitContent()
+        if (chartRef.current) {
+          centerLastCandle(chartRef.current, candles.length, (range) => {
+            initialRangeRef.current = range
+          })
+        }
+
+        live = subscribeLiveCandles(
+          pair,
+          timeframe,
+          (candle) => {
+            if (
+              controller.signal.aborted ||
+              seriesRef.current !== series ||
+              rsiSeriesRef.current !== rsiSeries
+            ) {
+              return
+            }
+            if (applyLiveCandle(candles, candle)) {
+              paintLive(candles, candle)
+            }
+          },
+          candles.at(-1),
+        )
+
+        if (closed) {
+          live.close()
+        }
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) {
+          return
+        }
+        if (reason instanceof DOMException && reason.name === 'AbortError') {
+          return
+        }
+        const message =
+          reason instanceof Error ? reason.message : `Failed to load ${pair.name} candles`
+        setError(message)
+      })
+
+    return () => {
+      closed = true
+      controller.abort()
+      live?.close()
+    }
+  }, [pair, timeframe, chartReady, rsiSettings])
+
+  const updateDraftSetting = (key: keyof RsiSettings, value: string) => {
+    setDraftRsiSettings((current) => ({
+      ...current,
+      [key]: Number(value),
+    }))
+  }
+
+  const openSettings = () => {
+    setDraftRsiSettings(rsiSettings)
+    setSettingsOpen(true)
+  }
+
+  const applySettings = () => {
+    const next = normalizeRsiSettings(draftRsiSettings)
+    setDraftRsiSettings(next)
+    setRsiSettings(next)
+    setSettingsOpen(false)
+  }
+
+  const resetSettings = () => {
+    setDraftRsiSettings(DEFAULT_RSI_SETTINGS)
+  }
+
+  return (
+    <div className="bitcoin-chart">
+      <div className="bitcoin-chart__header">
+        <span className="bitcoin-chart__title">
+          {pair.symbol} · Japanese candles
+        </span>
+        <div className="bitcoin-chart__timeframes" role="tablist" aria-label="Timeframes">
+          {TIMEFRAMES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={timeframe === item.id}
+              className={
+                timeframe === item.id
+                  ? 'bitcoin-chart__timeframe is-active'
+                  : 'bitcoin-chart__timeframe'
+              }
+              onClick={() => setTimeframe(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {error ? <p className="bitcoin-chart__error">{error}</p> : null}
+      <div className="bitcoin-chart__viewport">
+        <div className="bitcoin-chart__canvas" ref={containerRef} />
+        <button
+          type="button"
+          className="bitcoin-chart__indicator-gear"
+          onClick={openSettings}
+          aria-label="RSI settings"
+          title="RSI settings"
+        >
+          ⚙
+        </button>
+        {settingsOpen ? (
+          <div className="bitcoin-chart__settings">
+            <div className="bitcoin-chart__settings-grid">
+              <label>
+                <span>Length</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={draftRsiSettings.length}
+                  onChange={(event) => updateDraftSetting('length', event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Outer high</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={draftRsiSettings.outerHigh}
+                  onChange={(event) => updateDraftSetting('outerHigh', event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Upper band</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={draftRsiSettings.upperBand}
+                  onChange={(event) => updateDraftSetting('upperBand', event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Midline</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={draftRsiSettings.midline}
+                  onChange={(event) => updateDraftSetting('midline', event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Lower band</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={draftRsiSettings.lowerBand}
+                  onChange={(event) => updateDraftSetting('lowerBand', event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Outer low</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={draftRsiSettings.outerLow}
+                  onChange={(event) => updateDraftSetting('outerLow', event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="bitcoin-chart__settings-actions">
+              <button type="button" className="bitcoin-chart__settings-button" onClick={resetSettings}>
+                Defaults
+              </button>
+              <button type="button" className="bitcoin-chart__settings-button" onClick={() => setSettingsOpen(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="bitcoin-chart__settings-button bitcoin-chart__settings-button--primary"
+                onClick={applySettings}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        ) : null}
+        <div className="bitcoin-chart__controls" aria-label="Chart controls">
+          <button type="button" className="bitcoin-chart__control" onClick={() => zoomRange(1.25)}>
+            -
+          </button>
+          <button type="button" className="bitcoin-chart__control" onClick={() => zoomRange(0.8)}>
+            +
+          </button>
+          <button type="button" className="bitcoin-chart__control" onClick={() => shiftRange(-1)}>
+            &lt;
+          </button>
+          <button type="button" className="bitcoin-chart__control" onClick={() => shiftRange(1)}>
+            &gt;
+          </button>
+          <button
+            type="button"
+            className="bitcoin-chart__control bitcoin-chart__control--reset"
+            onClick={resetView}
+            aria-label="Reset chart view"
+            title="Reset chart view"
+          >
+            ↻
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -31,7 +31,10 @@
 }
 
 .watchlist {
-  width: 280px;
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  min-height: 0;
   border-left: 1px solid #2a2e39;
 }
 
