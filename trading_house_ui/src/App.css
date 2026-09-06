@@ -1,0 +1,51 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #131722;
+  color: #d1d4dc;
+}
+
+.topbar {
+  height: 40px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #2a2e39;
+  background: #1e222d;
+}
+
+.workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar,
+.watchlist {
+  width: 48px;
+  flex-shrink: 0;
+  background: #1e222d;
+}
+
+.sidebar {
+  border-right: 1px solid #2a2e39;
+}
+
+.watchlist {
+  width: 280px;
+  border-left: 1px solid #2a2e39;
+}
+
+.chart {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  background: #131722;
+}
+
+.statusbar {
+  height: 28px;
+  flex-shrink: 0;
+  border-top: 1px solid #2a2e39;
+  background: #1e222d;
+}
