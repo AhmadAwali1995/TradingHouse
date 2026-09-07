@@ -76,8 +76,6 @@
 
 .bitcoin-chart__indicator-gear {
   position: absolute;
-  right: 16px;
-  bottom: 86px;
   width: 22px;
   height: 22px;
   padding: 0;
@@ -94,6 +92,16 @@
   z-index: 4;
 }
 
+.bitcoin-chart__indicator-gear--rsi {
+  right: 16px;
+  bottom: 86px;
+}
+
+.bitcoin-chart__indicator-gear--nwe {
+  top: 8px;
+  right: 16px;
+}
+
 .bitcoin-chart__viewport:hover .bitcoin-chart__indicator-gear,
 .bitcoin-chart__viewport:focus-within .bitcoin-chart__indicator-gear,
 .bitcoin-chart__indicator-gear:focus-visible {
@@ -106,8 +114,6 @@
 
 .bitcoin-chart__settings {
   position: absolute;
-  right: 12px;
-  bottom: 116px;
   width: 260px;
   padding: 12px;
   border: 1px solid #2a2e39;
@@ -115,6 +121,34 @@
   background: rgba(19, 23, 34, 0.96);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   z-index: 4;
+}
+
+.bitcoin-chart__settings--rsi {
+  right: 12px;
+  bottom: 116px;
+}
+
+.bitcoin-chart__settings--nwe {
+  top: 40px;
+  right: 12px;
+  bottom: auto;
+}
+
+.bitcoin-chart__settings-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #d1d4dc;
+}
+
+.bitcoin-chart__settings-check {
+  grid-column: 1 / -1;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bitcoin-chart__settings-check input {
+  width: auto;
 }
 
 .bitcoin-chart__settings-grid {

@@ -12,6 +12,16 @@ export const TIMEFRAMES = [
 
 export type TimeframeId = (typeof TIMEFRAMES)[number]['id']
 
+export const TIMEFRAME_SECONDS: Record<TimeframeId, number> = {
+  '15m': 15 * 60,
+  '30m': 30 * 60,
+  '45m': 45 * 60,
+  '1h': 60 * 60,
+  '4h': 4 * 60 * 60,
+  '1d': 24 * 60 * 60,
+  '1w': 7 * 24 * 60 * 60,
+}
+
 export type Candle = {
   time: number
   open: number

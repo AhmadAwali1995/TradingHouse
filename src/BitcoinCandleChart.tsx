@@ -4,10 +4,14 @@ import {
   CandlestickSeries,
   ColorType,
   createChart,
+  createSeriesMarkers,
   LineSeries,
   LineStyle,
   type IChartApi,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type SeriesMarker,
+  type Time,
   type UTCTimestamp,
 } from 'lightweight-charts'
 import {
@@ -18,8 +22,16 @@ import {
   type TimeframeId,
 } from './candles'
 import type { Pair } from './data/config'
-import { RSI_LENGTH, calculateTradingViewRsi } from './indicators'
+import {
+  DEFAULT_NWE_SETTINGS,
+  RSI_LENGTH,
+  calculateNadarayaWatsonEnvelope,
+  calculateTradingViewRsi,
+  normalizeNweSettings,
+  type NweSettings,
+} from './indicators'
 import { subscribeLiveCandles } from './klineSocket'
+import { LastPriceCountdownPrimitive } from './lastPriceCountdown'
 import './BitcoinCandleChart.css'
 
 type LogicalRange = {
@@ -192,13 +204,22 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
   const rsiWhiteRef = useRef<ISeriesApi<'Line'> | null>(null)
   const rsiUpperRef = useRef<ISeriesApi<'Line'> | null>(null)
   const rsiLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const nweUpperRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const nweLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const nweMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
+  const candlesRef = useRef<Candle[]>([])
+  const countdownRef = useRef<LastPriceCountdownPrimitive | null>(null)
   const initialRangeRef = useRef<LogicalRange | null>(null)
   const [timeframe, setTimeframe] = useState<TimeframeId>('1h')
   const [chartReady, setChartReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState<null | 'rsi' | 'nwe'>(null)
   const [rsiSettings, setRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
   const [draftRsiSettings, setDraftRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
+  const [nweSettings, setNweSettings] = useState<NweSettings>(DEFAULT_NWE_SETTINGS)
+  const [draftNweSettings, setDraftNweSettings] = useState<NweSettings>(DEFAULT_NWE_SETTINGS)
+  const nweSettingsRef = useRef(nweSettings)
+  nweSettingsRef.current = nweSettings
 
   const shiftRange = (direction: -1 | 1) => {
     const chart = chartRef.current
@@ -281,13 +302,39 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
     })
 
     chartRef.current = chart
-    seriesRef.current = chart.addSeries(CandlestickSeries, {
+
+    const series = chart.addSeries(CandlestickSeries, {
       upColor: '#26a69a',
       downColor: '#ef5350',
       borderVisible: false,
       wickUpColor: '#26a69a',
       wickDownColor: '#ef5350',
+      lastValueVisible: false,
+      priceLineVisible: true,
+      priceLineStyle: LineStyle.Dotted,
     })
+    const countdown = new LastPriceCountdownPrimitive(timeframe)
+    series.attachPrimitive(countdown)
+    seriesRef.current = series
+    countdownRef.current = countdown
+    nweMarkersRef.current = createSeriesMarkers(series, [])
+
+    const nweUpper = chart.addSeries(LineSeries, {
+      color: '#00897b',
+      lineWidth: 2,
+      crosshairMarkerVisible: false,
+      priceLineVisible: false,
+      lastValueVisible: false,
+    })
+    const nweLower = chart.addSeries(LineSeries, {
+      color: '#f23645',
+      lineWidth: 2,
+      crosshairMarkerVisible: false,
+      priceLineVisible: false,
+      lastValueVisible: false,
+    })
+    nweUpperRef.current = nweUpper
+    nweLowerRef.current = nweLower
 
     const rsiBandTop = chart.addSeries(
       BaselineSeries,
@@ -471,6 +518,10 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
       rsiWhiteRef.current = null
       rsiUpperRef.current = null
       rsiLowerRef.current = null
+      nweUpperRef.current = null
+      nweLowerRef.current = null
+      nweMarkersRef.current = null
+      countdownRef.current = null
       chartRef.current = null
       chart.remove()
     }
@@ -486,6 +537,9 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
     const rsiWhite = rsiWhiteRef.current
     const rsiUpper = rsiUpperRef.current
     const rsiLower = rsiLowerRef.current
+    const nweUpper = nweUpperRef.current
+    const nweLower = nweLowerRef.current
+    const nweMarkers = nweMarkersRef.current
     if (
       !series ||
       !rsiSeries ||
@@ -495,7 +549,10 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
       !rsiMidDown ||
       !rsiWhite ||
       !rsiUpper ||
-      !rsiLower
+      !rsiLower ||
+      !nweUpper ||
+      !nweLower ||
+      !nweMarkers
     ) {
       return
     }
@@ -557,6 +614,39 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
       )
     }
 
+    const paintNwe = (candles: Candle[]) => {
+      const result = calculateNadarayaWatsonEnvelope(candles, nweSettingsRef.current)
+      nweUpper.setData(
+        result.points.map((point) => ({
+          time: point.time as UTCTimestamp,
+          value: point.upper,
+        })),
+      )
+      nweLower.setData(
+        result.points.map((point) => ({
+          time: point.time as UTCTimestamp,
+          value: point.lower,
+        })),
+      )
+      nweMarkers.setMarkers(
+        result.crosses.map((cross): SeriesMarker<Time> =>
+          cross.direction === 'down'
+            ? {
+                time: cross.time as UTCTimestamp,
+                position: 'aboveBar',
+                shape: 'arrowDown',
+                color: '#f23645',
+              }
+            : {
+                time: cross.time as UTCTimestamp,
+                position: 'belowBar',
+                shape: 'arrowUp',
+                color: '#00897b',
+              },
+        ),
+      )
+    }
+
     const paintHistory = (candles: Candle[]) => {
       series.setData(
         candles.map((candle) => ({
@@ -568,6 +658,7 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
         })),
       )
       paintRsi(candles)
+      paintNwe(candles)
     }
 
     const paintLive = (candles: Candle[], candle: Candle) => {
@@ -579,6 +670,7 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
         close: candle.close,
       })
       paintRsi(candles)
+      paintNwe(candles)
     }
 
     void fetchCandles(pair, timeframe, controller.signal)
@@ -593,6 +685,7 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
         }
 
         const candles = [...history]
+        candlesRef.current = candles
         paintHistory(candles)
         chartRef.current?.timeScale().fitContent()
         if (chartRef.current) {
@@ -613,6 +706,7 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
               return
             }
             if (applyLiveCandle(candles, candle)) {
+              candlesRef.current = candles
               paintLive(candles, candle)
             }
           },
@@ -639,8 +733,54 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
       closed = true
       controller.abort()
       live?.close()
+      candlesRef.current = []
     }
   }, [pair, timeframe, chartReady, rsiSettings])
+
+  useEffect(() => {
+    const nweUpper = nweUpperRef.current
+    const nweLower = nweLowerRef.current
+    const nweMarkers = nweMarkersRef.current
+    const candles = candlesRef.current
+    if (!nweUpper || !nweLower || !nweMarkers || candles.length === 0) {
+      return
+    }
+
+    const result = calculateNadarayaWatsonEnvelope(candles, nweSettings)
+    nweUpper.setData(
+      result.points.map((point) => ({
+        time: point.time as UTCTimestamp,
+        value: point.upper,
+      })),
+    )
+    nweLower.setData(
+      result.points.map((point) => ({
+        time: point.time as UTCTimestamp,
+        value: point.lower,
+      })),
+    )
+    nweMarkers.setMarkers(
+      result.crosses.map((cross): SeriesMarker<Time> =>
+        cross.direction === 'down'
+          ? {
+              time: cross.time as UTCTimestamp,
+              position: 'aboveBar',
+              shape: 'arrowDown',
+              color: '#f23645',
+            }
+          : {
+              time: cross.time as UTCTimestamp,
+              position: 'belowBar',
+              shape: 'arrowUp',
+              color: '#00897b',
+            },
+      ),
+    )
+  }, [nweSettings, chartReady])
+
+  useEffect(() => {
+    countdownRef.current?.setTimeframe(timeframe)
+  }, [timeframe, chartReady])
 
   const updateDraftSetting = (key: keyof RsiSettings, value: string) => {
     setDraftRsiSettings((current) => ({
@@ -649,20 +789,44 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
     }))
   }
 
-  const openSettings = () => {
+  const updateDraftNweSetting = (key: 'bandwidth' | 'multiplier' | 'lookback', value: string) => {
+    setDraftNweSettings((current) => ({
+      ...current,
+      [key]: Number(value),
+    }))
+  }
+
+  const openRsiSettings = () => {
     setDraftRsiSettings(rsiSettings)
-    setSettingsOpen(true)
+    setSettingsOpen('rsi')
+  }
+
+  const openNweSettings = () => {
+    setDraftNweSettings(nweSettings)
+    setSettingsOpen('nwe')
   }
 
   const applySettings = () => {
-    const next = normalizeRsiSettings(draftRsiSettings)
-    setDraftRsiSettings(next)
-    setRsiSettings(next)
-    setSettingsOpen(false)
+    if (settingsOpen === 'rsi') {
+      const next = normalizeRsiSettings(draftRsiSettings)
+      setDraftRsiSettings(next)
+      setRsiSettings(next)
+    }
+    if (settingsOpen === 'nwe') {
+      const next = normalizeNweSettings(draftNweSettings)
+      setDraftNweSettings(next)
+      setNweSettings(next)
+    }
+    setSettingsOpen(null)
   }
 
   const resetSettings = () => {
-    setDraftRsiSettings(DEFAULT_RSI_SETTINGS)
+    if (settingsOpen === 'rsi') {
+      setDraftRsiSettings(DEFAULT_RSI_SETTINGS)
+    }
+    if (settingsOpen === 'nwe') {
+      setDraftNweSettings(DEFAULT_NWE_SETTINGS)
+    }
   }
 
   return (
@@ -695,15 +859,25 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
         <div className="bitcoin-chart__canvas" ref={containerRef} />
         <button
           type="button"
-          className="bitcoin-chart__indicator-gear"
-          onClick={openSettings}
-          aria-label="RSI settings"
-          title="RSI settings"
+          className="bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--nwe"
+          onClick={openNweSettings}
+          aria-label="Nadaraya-Watson Envelope settings"
+          title="Nadaraya-Watson Envelope settings"
         >
           ⚙
         </button>
-        {settingsOpen ? (
-          <div className="bitcoin-chart__settings">
+        <button
+          type="button"
+          className="bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--rsi"
+          onClick={openRsiSettings}
+          aria-label="Better RSI settings"
+          title="Better RSI settings"
+        >
+          ⚙
+        </button>
+        {settingsOpen === 'rsi' ? (
+          <div className="bitcoin-chart__settings bitcoin-chart__settings--rsi">
+            <p className="bitcoin-chart__settings-title">Better RSI</p>
             <div className="bitcoin-chart__settings-grid">
               <label>
                 <span>Length</span>
@@ -769,7 +943,72 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
               <button type="button" className="bitcoin-chart__settings-button" onClick={resetSettings}>
                 Defaults
               </button>
-              <button type="button" className="bitcoin-chart__settings-button" onClick={() => setSettingsOpen(false)}>
+              <button type="button" className="bitcoin-chart__settings-button" onClick={() => setSettingsOpen(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="bitcoin-chart__settings-button bitcoin-chart__settings-button--primary"
+                onClick={applySettings}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {settingsOpen === 'nwe' ? (
+          <div className="bitcoin-chart__settings bitcoin-chart__settings--nwe">
+            <p className="bitcoin-chart__settings-title">Nadaraya-Watson Envelope</p>
+            <div className="bitcoin-chart__settings-grid">
+              <label>
+                <span>Bandwidth</span>
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={draftNweSettings.bandwidth}
+                  onChange={(event) => updateDraftNweSetting('bandwidth', event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Multiplier</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={draftNweSettings.multiplier}
+                  onChange={(event) => updateDraftNweSetting('multiplier', event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Lookback</span>
+                <input
+                  type="number"
+                  min="2"
+                  max="2000"
+                  value={draftNweSettings.lookback}
+                  onChange={(event) => updateDraftNweSetting('lookback', event.target.value)}
+                />
+              </label>
+              <label className="bitcoin-chart__settings-check">
+                <span>Repainting smoothing</span>
+                <input
+                  type="checkbox"
+                  checked={draftNweSettings.repaint}
+                  onChange={(event) =>
+                    setDraftNweSettings((current) => ({
+                      ...current,
+                      repaint: event.target.checked,
+                    }))
+                  }
+                />
+              </label>
+            </div>
+            <div className="bitcoin-chart__settings-actions">
+              <button type="button" className="bitcoin-chart__settings-button" onClick={resetSettings}>
+                Defaults
+              </button>
+              <button type="button" className="bitcoin-chart__settings-button" onClick={() => setSettingsOpen(null)}>
                 Cancel
               </button>
               <button
