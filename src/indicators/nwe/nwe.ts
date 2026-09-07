@@ -27,6 +27,7 @@ export type NwePoint = {
 
 export type NweCross = {
   time: number
+  price: number
   direction: 'up' | 'down'
 }
 
@@ -44,10 +45,10 @@ function collectCrosses(src: number[], times: number[], upper: number[], lower: 
 
   for (let index = 1; index < src.length; index += 1) {
     if (src[index] > upper[index] && src[index - 1] < upper[index]) {
-      crosses.push({ time: times[index], direction: 'down' })
+      crosses.push({ time: times[index], price: src[index], direction: 'down' })
     }
     if (src[index] < lower[index] && src[index - 1] > lower[index]) {
-      crosses.push({ time: times[index], direction: 'up' })
+      crosses.push({ time: times[index], price: src[index], direction: 'up' })
     }
   }
 
@@ -60,21 +61,24 @@ function calculateRepainting(
   multiplier: number,
   lookback: number,
 ): NweResult {
-  const window = candles.slice(-lookback)
-  const size = window.length
+  const size = candles.length
   if (size < 2) {
     return { points: [], crosses: [] }
   }
 
-  const src = window.map((candle) => candle.close)
-  const times = window.map((candle) => candle.time)
+  const radius = Math.max(1, lookback - 1)
+  const src = candles.map((candle) => candle.close)
+  const times = candles.map((candle) => candle.time)
   const middle = new Array<number>(size)
   let sae = 0
 
   for (let index = 0; index < size; index += 1) {
     let sum = 0
     let weightSum = 0
-    for (let other = 0; other < size; other += 1) {
+    const start = Math.max(0, index - radius)
+    const end = Math.min(size - 1, index + radius)
+
+    for (let other = start; other <= end; other += 1) {
       const weight = gauss(index - other, bandwidth)
       sum += src[other] * weight
       weightSum += weight
@@ -88,7 +92,7 @@ function calculateRepainting(
   const lower = middle.map((value) => value - width)
 
   return {
-    points: window.map((candle, index) => ({
+    points: candles.map((candle, index) => ({
       time: candle.time,
       middle: middle[index],
       upper: upper[index],

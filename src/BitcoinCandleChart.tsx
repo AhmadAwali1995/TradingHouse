@@ -4,14 +4,10 @@ import {
   CandlestickSeries,
   ColorType,
   createChart,
-  createSeriesMarkers,
   LineSeries,
   LineStyle,
   type IChartApi,
   type ISeriesApi,
-  type ISeriesMarkersPluginApi,
-  type SeriesMarker,
-  type Time,
   type UTCTimestamp,
 } from 'lightweight-charts'
 import {
@@ -32,6 +28,7 @@ import {
 } from './indicators'
 import { subscribeLiveCandles } from './klineSocket'
 import { LastPriceCountdownPrimitive } from './lastPriceCountdown'
+import { NweSignalMarkersPrimitive } from './nweSignalMarkers'
 import './BitcoinCandleChart.css'
 
 type LogicalRange = {
@@ -206,7 +203,7 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
   const rsiLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
   const nweUpperRef = useRef<ISeriesApi<'Line'> | null>(null)
   const nweLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const nweMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
+  const nweMarkersRef = useRef<NweSignalMarkersPrimitive | null>(null)
   const candlesRef = useRef<Candle[]>([])
   const countdownRef = useRef<LastPriceCountdownPrimitive | null>(null)
   const initialRangeRef = useRef<LogicalRange | null>(null)
@@ -315,13 +312,16 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
     })
     const countdown = new LastPriceCountdownPrimitive(timeframe)
     series.attachPrimitive(countdown)
+    const nweMarkers = new NweSignalMarkersPrimitive()
+    series.attachPrimitive(nweMarkers)
     seriesRef.current = series
     countdownRef.current = countdown
-    nweMarkersRef.current = createSeriesMarkers(series, [])
+    nweMarkersRef.current = nweMarkers
 
     const nweUpper = chart.addSeries(LineSeries, {
       color: '#00897b',
       lineWidth: 2,
+      lineStyle: LineStyle.Dashed,
       crosshairMarkerVisible: false,
       priceLineVisible: false,
       lastValueVisible: false,
@@ -329,6 +329,7 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
     const nweLower = chart.addSeries(LineSeries, {
       color: '#f23645',
       lineWidth: 2,
+      lineStyle: LineStyle.Dashed,
       crosshairMarkerVisible: false,
       priceLineVisible: false,
       lastValueVisible: false,
@@ -629,18 +630,18 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
         })),
       )
       nweMarkers.setMarkers(
-        result.crosses.map((cross): SeriesMarker<Time> =>
+        result.crosses.map((cross) =>
           cross.direction === 'down'
             ? {
                 time: cross.time as UTCTimestamp,
-                position: 'aboveBar',
-                shape: 'arrowDown',
+                price: cross.price,
+                direction: 'down',
                 color: '#f23645',
               }
             : {
                 time: cross.time as UTCTimestamp,
-                position: 'belowBar',
-                shape: 'arrowUp',
+                price: cross.price,
+                direction: 'up',
                 color: '#00897b',
               },
         ),
@@ -760,18 +761,18 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
       })),
     )
     nweMarkers.setMarkers(
-      result.crosses.map((cross): SeriesMarker<Time> =>
+      result.crosses.map((cross) =>
         cross.direction === 'down'
           ? {
               time: cross.time as UTCTimestamp,
-              position: 'aboveBar',
-              shape: 'arrowDown',
+              price: cross.price,
+              direction: 'down',
               color: '#f23645',
             }
           : {
               time: cross.time as UTCTimestamp,
-              position: 'belowBar',
-              shape: 'arrowUp',
+              price: cross.price,
+              direction: 'up',
               color: '#00897b',
             },
       ),
