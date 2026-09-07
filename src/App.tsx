@@ -12,6 +12,7 @@ function App() {
   const [indicatorVisibility, setIndicatorVisibility] = useState<IndicatorVisibility>({
     nwe: true,
     rsi: true,
+    cipherB: true,
   })
 
   return (
