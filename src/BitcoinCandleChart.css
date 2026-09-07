@@ -74,6 +74,39 @@
   height: 100%;
 }
 
+.bitcoin-chart__loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(19, 23, 34, 0.58);
+  color: #d1d4dc;
+  font-size: 13px;
+  backdrop-filter: blur(1px);
+  z-index: 3;
+}
+
+.bitcoin-chart__loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(209, 212, 220, 0.28);
+  border-top-color: #d1d4dc;
+  border-radius: 999px;
+  animation: bitcoin-chart-spin 0.75s linear infinite;
+}
+
+@keyframes bitcoin-chart-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .bitcoin-chart__indicator-gear {
   position: absolute;
   width: 22px;

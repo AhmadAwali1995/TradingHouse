@@ -1,19 +1,16 @@
+import { getBinanceInterval, mergeIntoBucket, type Candle, type TimeframeId } from './candles'
 import { getApiLink } from './data/config'
+import type { Pair } from './data/config'
 
 export type PairTicker = {
   symbol: string
+  openPrice: number
   lastPrice: number
   priceChangePercent: number
 }
 
 export type LiveTickerSubscription = {
   close: () => void
-}
-
-type BinanceTicker24hr = {
-  symbol: string
-  lastPrice: string
-  priceChangePercent: string
 }
 
 type BinanceBookTickerRow = {
@@ -27,47 +24,101 @@ type BinanceCombinedBookTickerMessage = {
   data?: BinanceBookTickerRow
 }
 
-export async function fetchPairTickers(
-  symbols: string[],
+type BinanceKline = [
+  number,
+  string,
+  string,
+  string,
+  string,
+  ...unknown[],
+]
+
+function toCandle(kline: BinanceKline): Candle {
+  return {
+    time: Math.floor(kline[0] / 1000),
+    open: Number(kline[1]),
+    high: Number(kline[2]),
+    low: Number(kline[3]),
+    close: Number(kline[4]),
+  }
+}
+
+function formatTimeframeChange(lastPrice: number, openPrice: number): number {
+  if (openPrice === 0) {
+    return 0
+  }
+
+  return ((lastPrice - openPrice) / openPrice) * 100
+}
+
+async function fetchCurrentTimeframeCandle(
+  pair: Pair,
+  timeframe: TimeframeId,
   signal?: AbortSignal,
-): Promise<Map<string, PairTicker>> {
-  const unique = [...new Set(symbols)]
-  if (unique.length === 0) {
-    return new Map()
-  }
-
-  const params = new URLSearchParams()
-  if (unique.length === 1) {
-    params.set('symbol', unique[0])
-  } else {
-    params.set('symbols', JSON.stringify(unique))
-  }
-
-  const response = await fetch(`${getApiLink('binanceTicker24hr')}?${params}`, {
-    signal,
+): Promise<Candle | null> {
+  const interval = getBinanceInterval(timeframe)
+  const limit = timeframe === '45m' ? 3 : 1
+  const params = new URLSearchParams({
+    symbol: pair.symbol,
+    interval,
+    limit: String(limit),
   })
 
+  const requestInit =
+    typeof AbortSignal !== 'undefined' && signal instanceof AbortSignal ? { signal } : undefined
+  const response = await fetch(`${getApiLink(pair.api)}?${params}`, requestInit)
   if (!response.ok) {
     throw new Error(`Failed to load tickers (${response.status})`)
   }
 
-  const payload = (await response.json()) as BinanceTicker24hr | BinanceTicker24hr[]
-  const rows = Array.isArray(payload) ? payload : [payload]
+  const payload = (await response.json()) as BinanceKline[]
+  const candles = payload.map(toCandle)
+  if (candles.length === 0) {
+    return null
+  }
+
+  if (timeframe !== '45m') {
+    return candles.at(-1) ?? null
+  }
+
+  let current: Candle | undefined
+  for (const candle of candles) {
+    current = mergeIntoBucket(current, candle, 45 * 60)
+  }
+
+  return current ?? null
+}
+
+export async function fetchPairTickers(
+  pairs: Pair[],
+  timeframe: TimeframeId,
+  signal?: AbortSignal,
+): Promise<Map<string, PairTicker>> {
+  if (pairs.length === 0) {
+    return new Map()
+  }
+
   const tickers = new Map<string, PairTicker>()
+  const rows = await Promise.all(
+    pairs.map(async (pair) => ({
+      pair,
+      candle: await fetchCurrentTimeframeCandle(pair, timeframe, signal),
+    })),
+  )
 
   for (const row of rows) {
-    tickers.set(row.symbol, toPairTicker(row))
+    if (!row.candle) {
+      continue
+    }
+    tickers.set(row.pair.symbol, {
+      symbol: row.pair.symbol,
+      openPrice: row.candle.open,
+      lastPrice: row.candle.close,
+      priceChangePercent: formatTimeframeChange(row.candle.close, row.candle.open),
+    })
   }
 
   return tickers
-}
-
-function toPairTicker(row: { symbol: string; lastPrice: string; priceChangePercent: string }): PairTicker {
-  return {
-    symbol: row.symbol,
-    lastPrice: Number(row.lastPrice),
-    priceChangePercent: Number(row.priceChangePercent),
-  }
 }
 
 function toPairTickerFromBookTicker(row: BinanceBookTickerRow): PairTicker {
@@ -77,16 +128,17 @@ function toPairTickerFromBookTicker(row: BinanceBookTickerRow): PairTicker {
 
   return {
     symbol: row.s,
+    openPrice: Number.NaN,
     lastPrice: midPrice,
     priceChangePercent: Number.NaN,
   }
 }
 
 export function subscribeLiveTickers(
-  symbols: string[],
+  pairs: Pair[],
   onTickers: (tickers: Map<string, PairTicker>) => void,
 ): LiveTickerSubscription {
-  const allowed = new Set(symbols)
+  const allowed = new Set(pairs.map((pair) => pair.symbol))
   let socket: WebSocket | null = null
   let closed = false
   let retry: ReturnType<typeof setTimeout> | undefined

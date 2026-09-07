@@ -26,6 +26,7 @@ import {
   normalizeNweSettings,
   type NweSettings,
 } from './indicators'
+import type { IndicatorVisibility } from './indicatorCatalog'
 import { subscribeLiveCandles } from './klineSocket'
 import { LastPriceCountdownPrimitive } from './lastPriceCountdown'
 import { NweSignalMarkersPrimitive } from './nweSignalMarkers'
@@ -189,7 +190,17 @@ function centerLastCandle(chart: IChartApi, candleCount: number, onCentered?: (r
   })
 }
 
-export function BitcoinCandleChart({ pair }: { pair: Pair }) {
+export function BitcoinCandleChart({
+  pair,
+  timeframe,
+  indicatorVisibility,
+  onTimeframeChange,
+}: {
+  pair: Pair
+  timeframe: TimeframeId
+  indicatorVisibility: IndicatorVisibility
+  onTimeframeChange: (timeframe: TimeframeId) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -207,15 +218,17 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
   const candlesRef = useRef<Candle[]>([])
   const countdownRef = useRef<LastPriceCountdownPrimitive | null>(null)
   const initialRangeRef = useRef<LogicalRange | null>(null)
-  const [timeframe, setTimeframe] = useState<TimeframeId>('1h')
   const [chartReady, setChartReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState<null | 'rsi' | 'nwe'>(null)
   const [rsiSettings, setRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
   const [draftRsiSettings, setDraftRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
   const [nweSettings, setNweSettings] = useState<NweSettings>(DEFAULT_NWE_SETTINGS)
   const [draftNweSettings, setDraftNweSettings] = useState<NweSettings>(DEFAULT_NWE_SETTINGS)
+  const indicatorVisibilityRef = useRef(indicatorVisibility)
   const nweSettingsRef = useRef(nweSettings)
+  indicatorVisibilityRef.current = indicatorVisibility
   nweSettingsRef.current = nweSettings
 
   const shiftRange = (direction: -1 | 1) => {
@@ -254,14 +267,14 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
     const initialRange = initialRangeRef.current
     const series = seriesRef.current
     const rsiSeries = rsiSeriesRef.current
-    if (!chart || !initialRange || !series || !rsiSeries) {
+    if (!chart || !initialRange || !series) {
       return
     }
 
     chart.timeScale().setVisibleLogicalRange(initialRange)
     requestAnimationFrame(() => {
       series.priceScale().applyOptions({ autoScale: true })
-      rsiSeries.priceScale().applyOptions({ autoScale: true })
+      rsiSeries?.priceScale().applyOptions({ autoScale: true })
     })
   }
 
@@ -337,164 +350,178 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
     nweUpperRef.current = nweUpper
     nweLowerRef.current = nweLower
 
-    const rsiBandTop = chart.addSeries(
-      BaselineSeries,
-      {
-        baseValue: { type: 'price', price: rsiSettings.midline },
-        topFillColor1: 'rgba(104, 33, 122, 0.26)',
-        topFillColor2: 'rgba(104, 33, 122, 0.26)',
-        topLineColor: 'rgba(0, 0, 0, 0)',
-        bottomFillColor1: 'rgba(0, 0, 0, 0)',
-        bottomFillColor2: 'rgba(0, 0, 0, 0)',
-        bottomLineColor: 'rgba(0, 0, 0, 0)',
+    let rsiBandTop: ISeriesApi<'Baseline'> | null = null
+    let rsiBandBottom: ISeriesApi<'Baseline'> | null = null
+    let rsiMidUp: ISeriesApi<'Line'> | null = null
+    let rsiMidDown: ISeriesApi<'Line'> | null = null
+    let rsiWhite: ISeriesApi<'Line'> | null = null
+    let rsiUpper: ISeriesApi<'Line'> | null = null
+    let rsiLower: ISeriesApi<'Line'> | null = null
+    let rsiSeries: ISeriesApi<'Line'> | null = null
+
+    if (indicatorVisibility.rsi) {
+      rsiBandTop = chart.addSeries(
+        BaselineSeries,
+        {
+          baseValue: { type: 'price', price: rsiSettings.midline },
+          topFillColor1: 'rgba(104, 33, 122, 0.26)',
+          topFillColor2: 'rgba(104, 33, 122, 0.26)',
+          topLineColor: 'rgba(0, 0, 0, 0)',
+          bottomFillColor1: 'rgba(0, 0, 0, 0)',
+          bottomFillColor2: 'rgba(0, 0, 0, 0)',
+          bottomLineColor: 'rgba(0, 0, 0, 0)',
+          lineWidth: 1,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        },
+        1,
+      )
+
+      rsiBandBottom = chart.addSeries(
+        BaselineSeries,
+        {
+          baseValue: { type: 'price', price: rsiSettings.midline },
+          topFillColor1: 'rgba(0, 0, 0, 0)',
+          topFillColor2: 'rgba(0, 0, 0, 0)',
+          topLineColor: 'rgba(0, 0, 0, 0)',
+          bottomFillColor1: 'rgba(104, 33, 122, 0.26)',
+          bottomFillColor2: 'rgba(104, 33, 122, 0.26)',
+          bottomLineColor: 'rgba(0, 0, 0, 0)',
+          lineWidth: 1,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        },
+        1,
+      )
+
+      rsiMidUp = chart.addSeries(
+        LineSeries,
+        {
+          color: '#2db84d',
+          lineWidth: 2,
+          lineStyle: LineStyle.Solid,
+          crosshairMarkerVisible: false,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        },
+        1,
+      )
+
+      rsiMidDown = chart.addSeries(
+        LineSeries,
+        {
+          color: '#d52d35',
+          lineWidth: 2,
+          lineStyle: LineStyle.Solid,
+          crosshairMarkerVisible: false,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        },
+        1,
+      )
+
+      rsiWhite = chart.addSeries(
+        LineSeries,
+        {
+          color: '#f3f4f6',
+          lineWidth: 2,
+          lineStyle: LineStyle.Solid,
+          crosshairMarkerVisible: false,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        },
+        1,
+      )
+
+      rsiUpper = chart.addSeries(
+        LineSeries,
+        {
+          color: '#ff3b30',
+          lineWidth: 2,
+          lineStyle: LineStyle.Solid,
+          crosshairMarkerVisible: false,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        },
+        1,
+      )
+
+      rsiLower = chart.addSeries(
+        LineSeries,
+        {
+          color: '#ff3b30',
+          lineWidth: 2,
+          lineStyle: LineStyle.Solid,
+          crosshairMarkerVisible: false,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        },
+        1,
+      )
+
+      rsiSeries = chart.addSeries(
+        LineSeries,
+        {
+          color: 'rgba(243, 244, 246, 0)',
+          lineWidth: 1,
+          title: `Better RSI ${rsiSettings.length}`,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          crosshairMarkerVisible: false,
+          autoscaleInfoProvider: () => ({
+            priceRange: {
+              minValue: rsiSettings.outerLow,
+              maxValue: rsiSettings.outerHigh,
+            },
+          }),
+        },
+        1,
+      )
+
+      rsiSeries.createPriceLine({
+        price: rsiSettings.outerHigh,
+        color: '#a66a2c',
         lineWidth: 1,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      },
-      1,
-    )
-
-    const rsiBandBottom = chart.addSeries(
-      BaselineSeries,
-      {
-        baseValue: { type: 'price', price: rsiSettings.midline },
-        topFillColor1: 'rgba(0, 0, 0, 0)',
-        topFillColor2: 'rgba(0, 0, 0, 0)',
-        topLineColor: 'rgba(0, 0, 0, 0)',
-        bottomFillColor1: 'rgba(104, 33, 122, 0.26)',
-        bottomFillColor2: 'rgba(104, 33, 122, 0.26)',
-        bottomLineColor: 'rgba(0, 0, 0, 0)',
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: true,
+        title: '',
+      })
+      rsiSeries.createPriceLine({
+        price: rsiSettings.upperBand,
+        color: '#9095a1',
         lineWidth: 1,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      },
-      1,
-    )
-
-    const rsiMidUp = chart.addSeries(
-      LineSeries,
-      {
-        color: '#2db84d',
-        lineWidth: 2,
-        lineStyle: LineStyle.Solid,
-        crosshairMarkerVisible: false,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      },
-      1,
-    )
-
-    const rsiMidDown = chart.addSeries(
-      LineSeries,
-      {
-        color: '#d52d35',
-        lineWidth: 2,
-        lineStyle: LineStyle.Solid,
-        crosshairMarkerVisible: false,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      },
-      1,
-    )
-
-    const rsiWhite = chart.addSeries(
-      LineSeries,
-      {
-        color: '#f3f4f6',
-        lineWidth: 2,
-        lineStyle: LineStyle.Solid,
-        crosshairMarkerVisible: false,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      },
-      1,
-    )
-
-    const rsiUpper = chart.addSeries(
-      LineSeries,
-      {
-        color: '#ff3b30',
-        lineWidth: 2,
-        lineStyle: LineStyle.Solid,
-        crosshairMarkerVisible: false,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      },
-      1,
-    )
-
-    const rsiLower = chart.addSeries(
-      LineSeries,
-      {
-        color: '#ff3b30',
-        lineWidth: 2,
-        lineStyle: LineStyle.Solid,
-        crosshairMarkerVisible: false,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      },
-      1,
-    )
-
-    const rsiSeries = chart.addSeries(
-      LineSeries,
-      {
-        color: 'rgba(243, 244, 246, 0)',
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: '',
+      })
+      rsiSeries.createPriceLine({
+        price: rsiSettings.midline,
+        color: '#9095a1',
         lineWidth: 1,
-        title: `Better RSI ${rsiSettings.length}`,
-        priceLineVisible: false,
-        lastValueVisible: true,
-        crosshairMarkerVisible: false,
-        autoscaleInfoProvider: () => ({
-          priceRange: {
-            minValue: rsiSettings.outerLow,
-            maxValue: rsiSettings.outerHigh,
-          },
-        }),
-      },
-      1,
-    )
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: '',
+      })
+      rsiSeries.createPriceLine({
+        price: rsiSettings.lowerBand,
+        color: '#9095a1',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: '',
+      })
+      rsiSeries.createPriceLine({
+        price: rsiSettings.outerLow,
+        color: '#a66a2c',
+        lineWidth: 1,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: true,
+        title: '',
+      })
 
-    rsiSeries.createPriceLine({
-      price: rsiSettings.outerHigh,
-      color: '#a66a2c',
-      lineWidth: 1,
-      lineStyle: LineStyle.Solid,
-      axisLabelVisible: true,
-      title: '',
-    })
-    rsiSeries.createPriceLine({
-      price: rsiSettings.upperBand,
-      color: '#9095a1',
-      lineWidth: 1,
-      lineStyle: LineStyle.Dashed,
-      axisLabelVisible: true,
-      title: '',
-    })
-    rsiSeries.createPriceLine({
-      price: rsiSettings.midline,
-      color: '#9095a1',
-      lineWidth: 1,
-      lineStyle: LineStyle.Dashed,
-      axisLabelVisible: true,
-      title: '',
-    })
-    rsiSeries.createPriceLine({
-      price: rsiSettings.lowerBand,
-      color: '#9095a1',
-      lineWidth: 1,
-      lineStyle: LineStyle.Dashed,
-      axisLabelVisible: true,
-      title: '',
-    })
-    rsiSeries.createPriceLine({
-      price: rsiSettings.outerLow,
-      color: '#a66a2c',
-      lineWidth: 1,
-      lineStyle: LineStyle.Solid,
-      axisLabelVisible: true,
-      title: '',
-    })
+      chart.panes()[0]?.setStretchFactor(3)
+      chart.panes()[1]?.setStretchFactor(1)
+    }
 
     rsiBandTopRef.current = rsiBandTop
     rsiBandBottomRef.current = rsiBandBottom
@@ -504,8 +531,6 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
     rsiUpperRef.current = rsiUpper
     rsiLowerRef.current = rsiLower
     rsiSeriesRef.current = rsiSeries
-    chart.panes()[0]?.setStretchFactor(3)
-    chart.panes()[1]?.setStretchFactor(1)
     setChartReady(true)
 
     return () => {
@@ -526,7 +551,7 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
       chartRef.current = null
       chart.remove()
     }
-  }, [rsiSettings])
+  }, [rsiSettings, indicatorVisibility.rsi])
 
   useEffect(() => {
     const series = seriesRef.current
@@ -541,19 +566,21 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
     const nweUpper = nweUpperRef.current
     const nweLower = nweLowerRef.current
     const nweMarkers = nweMarkersRef.current
+    const rsiVisible = indicatorVisibility.rsi
     if (
       !series ||
-      !rsiSeries ||
-      !rsiBandTop ||
-      !rsiBandBottom ||
-      !rsiMidUp ||
-      !rsiMidDown ||
-      !rsiWhite ||
-      !rsiUpper ||
-      !rsiLower ||
       !nweUpper ||
       !nweLower ||
-      !nweMarkers
+      !nweMarkers ||
+      (rsiVisible &&
+        (!rsiSeries ||
+          !rsiBandTop ||
+          !rsiBandBottom ||
+          !rsiMidUp ||
+          !rsiMidDown ||
+          !rsiWhite ||
+          !rsiUpper ||
+          !rsiLower))
     ) {
       return
     }
@@ -563,8 +590,23 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
     let live: ReturnType<typeof subscribeLiveCandles> | null = null
     initialRangeRef.current = null
     setError(null)
+    setLoading(true)
 
     const paintRsi = (candles: Candle[]) => {
+      if (
+        !indicatorVisibilityRef.current.rsi ||
+        !rsiSeries ||
+        !rsiBandTop ||
+        !rsiBandBottom ||
+        !rsiMidUp ||
+        !rsiMidDown ||
+        !rsiWhite ||
+        !rsiUpper ||
+        !rsiLower
+      ) {
+        return
+      }
+
       const points = calculateTradingViewRsi(candles, rsiSettings.length)
       const bandTop = points.map((point) => ({
         time: point.time as UTCTimestamp,
@@ -616,6 +658,11 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
     }
 
     const paintNwe = (candles: Candle[]) => {
+      if (!indicatorVisibilityRef.current.nwe) {
+        nweMarkers.setMarkers([])
+        return
+      }
+
       const result = calculateNadarayaWatsonEnvelope(candles, nweSettingsRef.current)
       nweUpper.setData(
         result.points.map((point) => ({
@@ -680,7 +727,7 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
           closed ||
           controller.signal.aborted ||
           seriesRef.current !== series ||
-          rsiSeriesRef.current !== rsiSeries
+          (rsiVisible && rsiSeriesRef.current !== rsiSeries)
         ) {
           return
         }
@@ -688,6 +735,7 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
         const candles = [...history]
         candlesRef.current = candles
         paintHistory(candles)
+        setLoading(false)
         chartRef.current?.timeScale().fitContent()
         if (chartRef.current) {
           centerLastCandle(chartRef.current, candles.length, (range) => {
@@ -702,7 +750,7 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
             if (
               controller.signal.aborted ||
               seriesRef.current !== series ||
-              rsiSeriesRef.current !== rsiSeries
+              (rsiVisible && rsiSeriesRef.current !== rsiSeries)
             ) {
               return
             }
@@ -728,6 +776,7 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
         const message =
           reason instanceof Error ? reason.message : `Failed to load ${pair.name} candles`
         setError(message)
+        setLoading(false)
       })
 
     return () => {
@@ -736,7 +785,7 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
       live?.close()
       candlesRef.current = []
     }
-  }, [pair, timeframe, chartReady, rsiSettings])
+  }, [pair, timeframe, chartReady, rsiSettings, indicatorVisibility.rsi])
 
   useEffect(() => {
     const nweUpper = nweUpperRef.current
@@ -777,11 +826,60 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
             },
       ),
     )
-  }, [nweSettings, chartReady])
+  }, [nweSettings, chartReady, indicatorVisibility])
 
   useEffect(() => {
     countdownRef.current?.setTimeframe(timeframe)
   }, [timeframe, chartReady])
+
+  useEffect(() => {
+    if (
+      (settingsOpen === 'rsi' && !indicatorVisibility.rsi) ||
+      (settingsOpen === 'nwe' && !indicatorVisibility.nwe)
+    ) {
+      setSettingsOpen(null)
+    }
+  }, [indicatorVisibility, settingsOpen])
+
+  useEffect(() => {
+    const nweVisible = indicatorVisibility.nwe
+    nweUpperRef.current?.applyOptions({ visible: nweVisible })
+    nweLowerRef.current?.applyOptions({ visible: nweVisible })
+
+    const candles = candlesRef.current
+    const nweMarkers = nweMarkersRef.current
+    if (!nweMarkers) {
+      return
+    }
+
+    if (!nweVisible) {
+      nweMarkers.setMarkers([])
+      return
+    }
+
+    if (candles.length === 0) {
+      return
+    }
+
+    const result = calculateNadarayaWatsonEnvelope(candles, nweSettingsRef.current)
+    nweMarkers.setMarkers(
+      result.crosses.map((cross) =>
+        cross.direction === 'down'
+          ? {
+              time: cross.time as UTCTimestamp,
+              price: cross.price,
+              direction: 'down',
+              color: '#f23645',
+            }
+          : {
+              time: cross.time as UTCTimestamp,
+              price: cross.price,
+              direction: 'up',
+              color: '#00897b',
+            },
+      ),
+    )
+  }, [indicatorVisibility, chartReady])
 
   const updateDraftSetting = (key: keyof RsiSettings, value: string) => {
     setDraftRsiSettings((current) => ({
@@ -848,7 +946,7 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
                   ? 'bitcoin-chart__timeframe is-active'
                   : 'bitcoin-chart__timeframe'
               }
-              onClick={() => setTimeframe(item.id)}
+              onClick={() => onTimeframeChange(item.id)}
             >
               {item.label}
             </button>
@@ -858,24 +956,34 @@ export function BitcoinCandleChart({ pair }: { pair: Pair }) {
       {error ? <p className="bitcoin-chart__error">{error}</p> : null}
       <div className="bitcoin-chart__viewport">
         <div className="bitcoin-chart__canvas" ref={containerRef} />
-        <button
-          type="button"
-          className="bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--nwe"
-          onClick={openNweSettings}
-          aria-label="Nadaraya-Watson Envelope settings"
-          title="Nadaraya-Watson Envelope settings"
-        >
-          ⚙
-        </button>
-        <button
-          type="button"
-          className="bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--rsi"
-          onClick={openRsiSettings}
-          aria-label="Better RSI settings"
-          title="Better RSI settings"
-        >
-          ⚙
-        </button>
+        {loading ? (
+          <div className="bitcoin-chart__loading" role="status" aria-live="polite" aria-label="Loading chart data">
+            <span className="bitcoin-chart__loading-spinner" aria-hidden="true" />
+            <span>Loading chart...</span>
+          </div>
+        ) : null}
+        {indicatorVisibility.nwe ? (
+          <button
+            type="button"
+            className="bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--nwe"
+            onClick={openNweSettings}
+            aria-label="Nadaraya-Watson Envelope settings"
+            title="Nadaraya-Watson Envelope settings"
+          >
+            ⚙
+          </button>
+        ) : null}
+        {indicatorVisibility.rsi ? (
+          <button
+            type="button"
+            className="bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--rsi"
+            onClick={openRsiSettings}
+            aria-label="Better RSI settings"
+            title="Better RSI settings"
+          >
+            ⚙
+          </button>
+        ) : null}
         {settingsOpen === 'rsi' ? (
           <div className="bitcoin-chart__settings bitcoin-chart__settings--rsi">
             <p className="bitcoin-chart__settings-title">Better RSI</p>

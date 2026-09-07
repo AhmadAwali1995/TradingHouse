@@ -40,15 +40,28 @@ function gauss(distance: number, bandwidth: number): number {
   return Math.exp(-(distance * distance) / (bandwidth * bandwidth * 2))
 }
 
-function collectCrosses(src: number[], times: number[], upper: number[], lower: number[]): NweCross[] {
+function collectCrosses(
+  candles: Candle[],
+  src: number[],
+  upper: number[],
+  lower: number[],
+): NweCross[] {
   const crosses: NweCross[] = []
 
   for (let index = 1; index < src.length; index += 1) {
-    if (src[index] > upper[index] && src[index - 1] < upper[index]) {
-      crosses.push({ time: times[index], price: src[index], direction: 'down' })
+    const previousClose = src[index - 1]
+    const currentClose = src[index]
+    const previousUpper = upper[index - 1]
+    const currentUpper = upper[index]
+    const previousLower = lower[index - 1]
+    const currentLower = lower[index]
+    const candle = candles[index]
+
+    if (currentClose >= currentUpper && previousClose <= previousUpper) {
+      crosses.push({ time: candle.time, price: candle.high, direction: 'down' })
     }
-    if (src[index] < lower[index] && src[index - 1] > lower[index]) {
-      crosses.push({ time: times[index], price: src[index], direction: 'up' })
+    if (currentClose <= currentLower && previousClose >= previousLower) {
+      crosses.push({ time: candle.time, price: candle.low, direction: 'up' })
     }
   }
 
@@ -68,7 +81,6 @@ function calculateRepainting(
 
   const radius = Math.max(1, lookback - 1)
   const src = candles.map((candle) => candle.close)
-  const times = candles.map((candle) => candle.time)
   const middle = new Array<number>(size)
   let sae = 0
 
@@ -98,7 +110,7 @@ function calculateRepainting(
       upper: upper[index],
       lower: lower[index],
     })),
-    crosses: collectCrosses(src, times, upper, lower),
+    crosses: collectCrosses(candles, src, upper, lower),
   }
 }
 
@@ -128,8 +140,8 @@ function calculateEndpoint(
   const smaPeriod = size - 1
   const absDev: number[] = []
   const points: NwePoint[] = []
+  const crossCandles: Candle[] = []
   const src: number[] = []
-  const times: number[] = []
   const upper: number[] = []
   const lower: number[] = []
 
@@ -151,8 +163,8 @@ function calculateEndpoint(
     mae = (mae / smaPeriod) * multiplier
 
     const candle = candles[index]
+    crossCandles.push(candle)
     src.push(candle.close)
-    times.push(candle.time)
     upper.push(middle + mae)
     lower.push(middle - mae)
     points.push({
@@ -165,7 +177,7 @@ function calculateEndpoint(
 
   return {
     points,
-    crosses: collectCrosses(src, times, upper, lower),
+    crosses: collectCrosses(crossCandles, src, upper, lower),
   }
 }
 
