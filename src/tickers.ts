@@ -40,6 +40,7 @@ function toCandle(kline: BinanceKline): Candle {
     high: Number(kline[2]),
     low: Number(kline[3]),
     close: Number(kline[4]),
+    volume: Number(kline[5]),
   }
 }
 

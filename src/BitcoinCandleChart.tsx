@@ -3,13 +3,17 @@ import {
   BaselineSeries,
   CandlestickSeries,
   ColorType,
+  CrosshairMode,
   createChart,
   createSeriesMarkers,
+  HistogramSeries,
   LineSeries,
   LineStyle,
   type IChartApi,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
+  type MouseEventParams,
+  type SeriesType,
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts'
@@ -23,21 +27,40 @@ import {
 import type { Pair } from './data/config'
 import {
   CIPHER_B_COLORS,
+  CM_MACD_COLORS,
   DEFAULT_CIPHER_B_SETTINGS,
-  DEFAULT_NWE_SETTINGS,
+  DEFAULT_CM_MACD_SETTINGS,
+  DEFAULT_LA_NWE_SETTINGS,
+  DEFAULT_SMA_SETTINGS,
+  DEFAULT_TV_MACD_SETTINGS,
   RSI_LENGTH,
+  SMA_COLORS,
+  SMA_SMOOTHING_TYPES,
+  SMA_SOURCES,
+  TV_MACD_COLORS,
+  TV_MACD_MA_TYPES,
   calculateCipherB,
-  calculateNadarayaWatsonEnvelope,
+  calculateCmMacd,
+  calculateLaNwe,
+  calculateSma,
   calculateTradingViewRsi,
+  calculateTvMacd,
   normalizeCipherBSettings,
-  normalizeNweSettings,
+  normalizeCmMacdSettings,
+  normalizeLaNweSettings,
+  normalizeSmaSettings,
+  normalizeTvMacdSettings,
   type CipherBSettings,
-  type NweSettings,
+  type CmMacdSettings,
+  type LaNweSettings,
+  type SmaSettings,
+  type TvMacdSettings,
 } from './indicators'
 import type { IndicatorVisibility } from './indicatorCatalog'
 import { subscribeLiveCandles } from './klineSocket'
 import { LastPriceCountdownPrimitive } from './lastPriceCountdown'
-import { NweSignalMarkersPrimitive } from './nweSignalMarkers'
+import { formatLastPrice } from './tickers'
+import { LaNweSignalMarkersPrimitive } from './la_nweSignalMarkers'
 import './BitcoinCandleChart.css'
 
 type LogicalRange = {
@@ -186,6 +209,19 @@ type CipherPaneSeries = {
   markers: ISeriesMarkersPluginApi<Time>
 }
 
+type MacdPaneSeries = {
+  histogram: ISeriesApi<'Histogram'>
+  macd: ISeriesApi<'Line'>
+  signal: ISeriesApi<'Line'>
+  markers: ISeriesMarkersPluginApi<Time>
+}
+
+type TvMacdPaneSeries = {
+  histogram: ISeriesApi<'Histogram'>
+  macd: ISeriesApi<'Line'>
+  signal: ISeriesApi<'Line'>
+}
+
 function applyOscillatorPaneStretch(chart: IChartApi) {
   const panes = chart.panes()
   panes[0]?.setStretchFactor(3)
@@ -201,6 +237,81 @@ function pruneEmptyOscillatorPanes(chart: IChartApi) {
       chart.removePane(index)
     }
   }
+}
+
+function rsiSeriesList(pane: RsiPaneSeries): Array<ISeriesApi<SeriesType>> {
+  return [
+    pane.bandTop,
+    pane.bandBottom,
+    pane.midUp,
+    pane.midDown,
+    pane.white,
+    pane.upper,
+    pane.lower,
+    pane.series,
+  ]
+}
+
+function cipherSeriesList(pane: CipherPaneSeries): Array<ISeriesApi<SeriesType>> {
+  return [pane.wt1, pane.wt2, pane.diff]
+}
+
+function macdSeriesList(pane: MacdPaneSeries): Array<ISeriesApi<SeriesType>> {
+  return [pane.histogram, pane.macd, pane.signal]
+}
+
+function tvMacdSeriesList(pane: TvMacdPaneSeries): Array<ISeriesApi<SeriesType>> {
+  return [pane.histogram, pane.macd, pane.signal]
+}
+
+function moveGroupToPane(series: Array<ISeriesApi<SeriesType>>, paneIndex: number) {
+  for (const item of series) {
+    if (item.getPane().paneIndex() !== paneIndex) {
+      item.moveToPane(paneIndex)
+    }
+  }
+}
+
+function ensurePaneCount(chart: IChartApi, count: number) {
+  while (chart.panes().length < count) {
+    chart.addPane(true)
+  }
+}
+
+function layoutOscillatorPanes(
+  chart: IChartApi,
+  rsi: RsiPaneSeries | null,
+  cipher: CipherPaneSeries | null,
+  tvMacd: TvMacdPaneSeries | null,
+  macd: MacdPaneSeries | null,
+) {
+  const groups: Array<Array<ISeriesApi<SeriesType>>> = []
+  if (rsi) {
+    groups.push(rsiSeriesList(rsi))
+  }
+  if (cipher) {
+    groups.push(cipherSeriesList(cipher))
+  }
+  if (tvMacd) {
+    groups.push(tvMacdSeriesList(tvMacd))
+  }
+  if (macd) {
+    groups.push(macdSeriesList(macd))
+  }
+
+  pruneEmptyOscillatorPanes(chart)
+  ensurePaneCount(chart, 1 + groups.length)
+
+  for (let offset = groups.length - 1; offset >= 0; offset -= 1) {
+    moveGroupToPane(groups[offset], 1 + offset)
+  }
+
+  pruneEmptyOscillatorPanes(chart)
+  applyOscillatorPaneStretch(chart)
+}
+
+function appendOscillatorPaneIndex(chart: IChartApi): number {
+  return chart.addPane(true).paneIndex()
 }
 
 function createRsiSeries(chart: IChartApi, settings: RsiSettings, paneIndex: number): RsiPaneSeries {
@@ -579,6 +690,231 @@ function removeCipherBSeries(chart: IChartApi, pane: CipherPaneSeries) {
   chart.removeSeries(pane.diff)
 }
 
+function createMacdSeries(chart: IChartApi, paneIndex: number): MacdPaneSeries {
+  const histogram = chart.addSeries(
+    HistogramSeries,
+    {
+      color: CM_MACD_COLORS.histFlat,
+      base: 0,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      title: 'CM_Ult_MacD_MTF',
+    },
+    paneIndex,
+  )
+  const macd = chart.addSeries(
+    LineSeries,
+    {
+      color: CM_MACD_COLORS.macdAbove,
+      lineWidth: 4,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: false,
+    },
+    paneIndex,
+  )
+  const signal = chart.addSeries(
+    LineSeries,
+    {
+      color: CM_MACD_COLORS.signalColorChange,
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    },
+    paneIndex,
+  )
+
+  histogram.createPriceLine({
+    price: 0,
+    color: CM_MACD_COLORS.zero,
+    lineWidth: 2,
+    lineStyle: LineStyle.Solid,
+    axisLabelVisible: true,
+    title: '',
+  })
+
+  return { histogram, macd, signal, markers: createSeriesMarkers(signal, []) }
+}
+
+function paintMacdSeries(
+  pane: MacdPaneSeries,
+  candles: Candle[],
+  settings: CmMacdSettings,
+  chartTimeframe: TimeframeId,
+) {
+  const points = calculateCmMacd(candles, settings, chartTimeframe)
+
+  pane.histogram.setData(
+    settings.showHistogram
+      ? points.map((point) => ({
+          time: point.time as UTCTimestamp,
+          value: point.hist,
+          color: point.histColor,
+        }))
+      : [],
+  )
+  pane.macd.setData(
+    settings.showMacdSignal
+      ? points.map((point) => ({
+          time: point.time as UTCTimestamp,
+          value: point.macd,
+          color: point.macdColor,
+        }))
+      : [],
+  )
+  pane.signal.setData(
+    settings.showMacdSignal
+      ? points.map((point) => ({
+          time: point.time as UTCTimestamp,
+          value: point.signal,
+          color: point.signalColor,
+        }))
+      : [],
+  )
+  pane.markers.setMarkers(
+    settings.showDots
+      ? points.flatMap((point) =>
+          point.cross
+            ? [
+                {
+                  time: point.time as UTCTimestamp,
+                  position: 'atPriceMiddle' as const,
+                  shape: 'circle' as const,
+                  color: point.macdColor,
+                  size: 2,
+                  price: point.signal,
+                },
+              ]
+            : [],
+        )
+      : [],
+  )
+}
+
+function removeMacdSeries(chart: IChartApi, pane: MacdPaneSeries) {
+  pane.markers.detach()
+  chart.removeSeries(pane.histogram)
+  chart.removeSeries(pane.macd)
+  chart.removeSeries(pane.signal)
+}
+
+function createTvMacdSeries(chart: IChartApi, paneIndex: number): TvMacdPaneSeries {
+  const histogram = chart.addSeries(
+    HistogramSeries,
+    {
+      color: TV_MACD_COLORS.histUpStrong,
+      base: 0,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      title: 'MACD',
+    },
+    paneIndex,
+  )
+  const macd = chart.addSeries(
+    LineSeries,
+    {
+      color: TV_MACD_COLORS.macd,
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: false,
+    },
+    paneIndex,
+  )
+  const signal = chart.addSeries(
+    LineSeries,
+    {
+      color: TV_MACD_COLORS.signal,
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    },
+    paneIndex,
+  )
+
+  histogram.createPriceLine({
+    price: 0,
+    color: TV_MACD_COLORS.zero,
+    lineWidth: 1,
+    lineStyle: LineStyle.Solid,
+    axisLabelVisible: true,
+    title: '',
+  })
+
+  return { histogram, macd, signal }
+}
+
+function paintTvMacdSeries(pane: TvMacdPaneSeries, candles: Candle[], settings: TvMacdSettings) {
+  const points = calculateTvMacd(candles, settings)
+  pane.histogram.setData(
+    points.map((point) => ({
+      time: point.time as UTCTimestamp,
+      value: point.hist,
+      color: point.histColor,
+    })),
+  )
+  pane.macd.setData(
+    points.map((point) => ({
+      time: point.time as UTCTimestamp,
+      value: point.macd,
+    })),
+  )
+  pane.signal.setData(
+    points.map((point) => ({
+      time: point.time as UTCTimestamp,
+      value: point.signal,
+    })),
+  )
+}
+
+function removeTvMacdSeries(chart: IChartApi, pane: TvMacdPaneSeries) {
+  chart.removeSeries(pane.histogram)
+  chart.removeSeries(pane.macd)
+  chart.removeSeries(pane.signal)
+}
+
+function paintSmaOverlay(
+  series: {
+    ma: ISeriesApi<'Line'>
+    smoothing: ISeriesApi<'Line'>
+    bbUpper: ISeriesApi<'Line'>
+    bbLower: ISeriesApi<'Line'>
+  },
+  candles: Candle[],
+  settings: SmaSettings,
+) {
+  const points = calculateSma(candles, settings)
+  series.ma.setData(
+    points.map((point) => ({
+      time: point.time as UTCTimestamp,
+      value: point.sma,
+    })),
+  )
+  series.smoothing.setData(
+    points.map((point) =>
+      point.smoothing === null
+        ? { time: point.time as UTCTimestamp }
+        : { time: point.time as UTCTimestamp, value: point.smoothing },
+    ),
+  )
+  series.bbUpper.setData(
+    points.map((point) =>
+      point.bbUpper === null
+        ? { time: point.time as UTCTimestamp }
+        : { time: point.time as UTCTimestamp, value: point.bbUpper },
+    ),
+  )
+  series.bbLower.setData(
+    points.map((point) =>
+      point.bbLower === null
+        ? { time: point.time as UTCTimestamp }
+        : { time: point.time as UTCTimestamp, value: point.bbLower },
+    ),
+  )
+}
+
 function centerLastCandle(chart: IChartApi, candleCount: number, onCentered?: (range: LogicalRange) => void) {
   if (candleCount <= 0) {
     return
@@ -609,6 +945,28 @@ function centerLastCandle(chart: IChartApi, candleCount: number, onCentered?: (r
   })
 }
 
+function formatVolume(value: number): string {
+  if (value >= 1_000_000_000) {
+    return `${(value / 1_000_000_000).toFixed(2)}B`
+  }
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(2)}M`
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(2)}K`
+  }
+  return formatLastPrice(value)
+}
+
+function candleChange(candle: Candle, candles: Candle[]) {
+  const index = candles.findIndex((item) => item.time === candle.time)
+  const previous = index > 0 ? candles[index - 1] : null
+  const base = previous?.close ?? candle.open
+  const delta = candle.close - base
+  const percent = base === 0 ? 0 : (delta / base) * 100
+  return { delta, percent, up: candle.close >= candle.open }
+}
+
 export function BitcoinCandleChart({
   pair,
   timeframe,
@@ -635,30 +993,105 @@ export function BitcoinCandleChart({
   const cipherWt2Ref = useRef<ISeriesApi<'Baseline'> | null>(null)
   const cipherDiffRef = useRef<ISeriesApi<'Baseline'> | null>(null)
   const cipherMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
-  const nweUpperRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const nweLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const nweMarkersRef = useRef<NweSignalMarkersPrimitive | null>(null)
+  const macdHistogramRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const macdLineRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const macdSignalRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const macdMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
+  const tvMacdHistogramRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const tvMacdLineRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const tvMacdSignalRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const la_nweUpperRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const la_nweLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const smaMaRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const smaSmoothingRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const smaBbUpperRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const smaBbLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const la_nweMarkersRef = useRef<LaNweSignalMarkersPrimitive | null>(null)
   const candlesRef = useRef<Candle[]>([])
   const countdownRef = useRef<LastPriceCountdownPrimitive | null>(null)
   const initialRangeRef = useRef<LogicalRange | null>(null)
   const [chartReady, setChartReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState<null | 'rsi' | 'nwe' | 'cipherB'>(null)
+  const [hoverCandle, setHoverCandle] = useState<Candle | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState<
+    null | 'rsi' | 'la_nwe' | 'cipherB' | 'macd' | 'cmMacd' | 'sma'
+  >(null)
   const [rsiSettings, setRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
   const [draftRsiSettings, setDraftRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
-  const [nweSettings, setNweSettings] = useState<NweSettings>(DEFAULT_NWE_SETTINGS)
-  const [draftNweSettings, setDraftNweSettings] = useState<NweSettings>(DEFAULT_NWE_SETTINGS)
+  const [la_nweSettings, setLaNweSettings] = useState<LaNweSettings>(DEFAULT_LA_NWE_SETTINGS)
+  const [draftLaNweSettings, setDraftLaNweSettings] = useState<LaNweSettings>(DEFAULT_LA_NWE_SETTINGS)
   const [cipherSettings, setCipherSettings] = useState<CipherBSettings>(DEFAULT_CIPHER_B_SETTINGS)
   const [draftCipherSettings, setDraftCipherSettings] = useState<CipherBSettings>(DEFAULT_CIPHER_B_SETTINGS)
+  const [macdSettings, setMacdSettings] = useState<CmMacdSettings>(DEFAULT_CM_MACD_SETTINGS)
+  const [draftMacdSettings, setDraftMacdSettings] = useState<CmMacdSettings>(DEFAULT_CM_MACD_SETTINGS)
+  const [tvMacdSettings, setTvMacdSettings] = useState<TvMacdSettings>(DEFAULT_TV_MACD_SETTINGS)
+  const [draftTvMacdSettings, setDraftTvMacdSettings] = useState<TvMacdSettings>(DEFAULT_TV_MACD_SETTINGS)
+  const [smaSettings, setSmaSettings] = useState<SmaSettings>(DEFAULT_SMA_SETTINGS)
+  const [draftSmaSettings, setDraftSmaSettings] = useState<SmaSettings>(DEFAULT_SMA_SETTINGS)
   const indicatorVisibilityRef = useRef(indicatorVisibility)
-  const nweSettingsRef = useRef(nweSettings)
+  const la_nweSettingsRef = useRef(la_nweSettings)
   const rsiSettingsRef = useRef(rsiSettings)
   const cipherSettingsRef = useRef(cipherSettings)
+  const macdSettingsRef = useRef(macdSettings)
+  const tvMacdSettingsRef = useRef(tvMacdSettings)
+  const smaSettingsRef = useRef(smaSettings)
+  const timeframeRef = useRef(timeframe)
   indicatorVisibilityRef.current = indicatorVisibility
-  nweSettingsRef.current = nweSettings
+  la_nweSettingsRef.current = la_nweSettings
   rsiSettingsRef.current = rsiSettings
   cipherSettingsRef.current = cipherSettings
+  macdSettingsRef.current = macdSettings
+  tvMacdSettingsRef.current = tvMacdSettings
+  smaSettingsRef.current = smaSettings
+  timeframeRef.current = timeframe
+
+  const getRsiPane = (): RsiPaneSeries | null => {
+    const series = rsiSeriesRef.current
+    const bandTop = rsiBandTopRef.current
+    const bandBottom = rsiBandBottomRef.current
+    const midUp = rsiMidUpRef.current
+    const midDown = rsiMidDownRef.current
+    const white = rsiWhiteRef.current
+    const upper = rsiUpperRef.current
+    const lower = rsiLowerRef.current
+    if (!series || !bandTop || !bandBottom || !midUp || !midDown || !white || !upper || !lower) {
+      return null
+    }
+    return { series, bandTop, bandBottom, midUp, midDown, white, upper, lower }
+  }
+
+  const getCipherPane = (): CipherPaneSeries | null => {
+    const wt1 = cipherWt1Ref.current
+    const wt2 = cipherWt2Ref.current
+    const diff = cipherDiffRef.current
+    const markers = cipherMarkersRef.current
+    if (!wt1 || !wt2 || !diff || !markers) {
+      return null
+    }
+    return { wt1, wt2, diff, markers }
+  }
+
+  const getMacdPane = (): MacdPaneSeries | null => {
+    const histogram = macdHistogramRef.current
+    const macd = macdLineRef.current
+    const signal = macdSignalRef.current
+    const markers = macdMarkersRef.current
+    if (!histogram || !macd || !signal || !markers) {
+      return null
+    }
+    return { histogram, macd, signal, markers }
+  }
+
+  const getTvMacdPane = (): TvMacdPaneSeries | null => {
+    const histogram = tvMacdHistogramRef.current
+    const macd = tvMacdLineRef.current
+    const signal = tvMacdSignalRef.current
+    if (!histogram || !macd || !signal) {
+      return null
+    }
+    return { histogram, macd, signal }
+  }
 
   const shiftRange = (direction: -1 | 1) => {
     const chart = chartRef.current
@@ -697,6 +1130,7 @@ export function BitcoinCandleChart({
     const series = seriesRef.current
     const rsiSeries = rsiSeriesRef.current
     const cipherSeries = cipherWt1Ref.current
+    const macdSeries = macdHistogramRef.current
     if (!chart || !initialRange || !series) {
       return
     }
@@ -706,6 +1140,8 @@ export function BitcoinCandleChart({
       series.priceScale().applyOptions({ autoScale: true })
       rsiSeries?.priceScale().applyOptions({ autoScale: true })
       cipherSeries?.priceScale().applyOptions({ autoScale: true })
+      tvMacdHistogramRef.current?.priceScale().applyOptions({ autoScale: true })
+      macdSeries?.priceScale().applyOptions({ autoScale: true })
     })
   }
 
@@ -734,9 +1170,10 @@ export function BitcoinCandleChart({
         borderColor: '#2a2e39',
         timeVisible: true,
         secondsVisible: false,
-        minBarSpacing: 2,
+        minBarSpacing: 10,
       },
       crosshair: {
+        mode: CrosshairMode.Normal,
         vertLine: { color: '#758696' },
         horzLine: { color: '#758696' },
       },
@@ -756,13 +1193,13 @@ export function BitcoinCandleChart({
     })
     const countdown = new LastPriceCountdownPrimitive(timeframe)
     series.attachPrimitive(countdown)
-    const nweMarkers = new NweSignalMarkersPrimitive()
-    series.attachPrimitive(nweMarkers)
+    const la_nweMarkers = new LaNweSignalMarkersPrimitive()
+    series.attachPrimitive(la_nweMarkers)
     seriesRef.current = series
     countdownRef.current = countdown
-    nweMarkersRef.current = nweMarkers
+    la_nweMarkersRef.current = la_nweMarkers
 
-    const nweUpper = chart.addSeries(LineSeries, {
+    const la_nweUpper = chart.addSeries(LineSeries, {
       color: '#00897b',
       lineWidth: 2,
       lineStyle: LineStyle.Dashed,
@@ -770,7 +1207,7 @@ export function BitcoinCandleChart({
       priceLineVisible: false,
       lastValueVisible: false,
     })
-    const nweLower = chart.addSeries(LineSeries, {
+    const la_nweLower = chart.addSeries(LineSeries, {
       color: '#f23645',
       lineWidth: 2,
       lineStyle: LineStyle.Dashed,
@@ -778,8 +1215,38 @@ export function BitcoinCandleChart({
       priceLineVisible: false,
       lastValueVisible: false,
     })
-    nweUpperRef.current = nweUpper
-    nweLowerRef.current = nweLower
+    la_nweUpperRef.current = la_nweUpper
+    la_nweLowerRef.current = la_nweLower
+
+    const smaLineOptions = {
+      lineWidth: 2 as const,
+      crosshairMarkerVisible: false,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      visible: false,
+    }
+    const smaMa = chart.addSeries(LineSeries, {
+      ...smaLineOptions,
+      color: SMA_COLORS.ma,
+      lastValueVisible: true,
+      title: 'SMA',
+    })
+    const smaSmoothing = chart.addSeries(LineSeries, {
+      ...smaLineOptions,
+      color: SMA_COLORS.smoothing,
+    })
+    const smaBbUpper = chart.addSeries(LineSeries, {
+      ...smaLineOptions,
+      color: SMA_COLORS.band,
+    })
+    const smaBbLower = chart.addSeries(LineSeries, {
+      ...smaLineOptions,
+      color: SMA_COLORS.band,
+    })
+    smaMaRef.current = smaMa
+    smaSmoothingRef.current = smaSmoothing
+    smaBbUpperRef.current = smaBbUpper
+    smaBbLowerRef.current = smaBbLower
     setChartReady(true)
 
     return () => {
@@ -797,9 +1264,20 @@ export function BitcoinCandleChart({
       cipherWt2Ref.current = null
       cipherDiffRef.current = null
       cipherMarkersRef.current = null
-      nweUpperRef.current = null
-      nweLowerRef.current = null
-      nweMarkersRef.current = null
+      macdHistogramRef.current = null
+      macdLineRef.current = null
+      macdSignalRef.current = null
+      macdMarkersRef.current = null
+      tvMacdHistogramRef.current = null
+      tvMacdLineRef.current = null
+      tvMacdSignalRef.current = null
+      la_nweUpperRef.current = null
+      la_nweLowerRef.current = null
+      smaMaRef.current = null
+      smaSmoothingRef.current = null
+      smaBbUpperRef.current = null
+      smaBbLowerRef.current = null
+      la_nweMarkersRef.current = null
       countdownRef.current = null
       chartRef.current = null
       chart.remove()
@@ -808,15 +1286,63 @@ export function BitcoinCandleChart({
 
   useEffect(() => {
     const chart = chartRef.current
+    const series = seriesRef.current
+    if (!chartReady || !chart || !series) {
+      return
+    }
+
+    const onCrosshairMove = (param: MouseEventParams) => {
+      const last = candlesRef.current.at(-1) ?? null
+      if (!param.point) {
+        setHoverCandle(last)
+        return
+      }
+
+      const data = param.seriesData.get(series)
+      if (
+        data &&
+        typeof data === 'object' &&
+        'open' in data &&
+        'high' in data &&
+        'low' in data &&
+        'close' in data
+      ) {
+        const bar = data as { time: number; open: number; high: number; low: number; close: number }
+        const match = candlesRef.current.find((candle) => candle.time === bar.time)
+        setHoverCandle(
+          match ?? {
+            time: bar.time,
+            open: bar.open,
+            high: bar.high,
+            low: bar.low,
+            close: bar.close,
+          },
+        )
+        return
+      }
+
+      if (typeof param.time === 'number') {
+        const match = candlesRef.current.find((candle) => candle.time === param.time)
+        setHoverCandle(match ?? last)
+        return
+      }
+
+      setHoverCandle(last)
+    }
+
+    chart.subscribeCrosshairMove(onCrosshairMove)
+    return () => {
+      chart.unsubscribeCrosshairMove(onCrosshairMove)
+    }
+  }, [chartReady])
+
+  useEffect(() => {
+    const chart = chartRef.current
     if (!chartReady || !chart || !indicatorVisibility.rsi) {
       return
     }
 
-    cipherWt1Ref.current?.moveToPane(2)
-    cipherWt2Ref.current?.moveToPane(2)
-    cipherDiffRef.current?.moveToPane(2)
-
-    const pane = createRsiSeries(chart, rsiSettings, 1)
+    const pane = createRsiSeries(chart, rsiSettings, appendOscillatorPaneIndex(chart))
     rsiSeriesRef.current = pane.series
     rsiBandTopRef.current = pane.bandTop
     rsiBandBottomRef.current = pane.bandBottom
@@ -828,15 +1354,10 @@ export function BitcoinCandleChart({
     if (candlesRef.current.length > 0) {
       paintRsiSeries(pane, candlesRef.current, rsiSettings)
     }
-    applyOscillatorPaneStretch(chart)
+    layoutOscillatorPanes(chart, pane, getCipherPane(), getTvMacdPane(), getMacdPane())
 
     return () => {
       const activeChart = chartRef.current
-      if (activeChart) {
-        removeRsiSeries(activeChart, pane)
-        pruneEmptyOscillatorPanes(activeChart)
-        applyOscillatorPaneStretch(activeChart)
-      }
       if (rsiSeriesRef.current === pane.series) {
         rsiSeriesRef.current = null
         rsiBandTopRef.current = null
@@ -847,6 +1368,10 @@ export function BitcoinCandleChart({
         rsiUpperRef.current = null
         rsiLowerRef.current = null
       }
+      if (activeChart) {
+        removeRsiSeries(activeChart, pane)
+        layoutOscillatorPanes(activeChart, null, getCipherPane(), getTvMacdPane(), getMacdPane())
+      }
     }
   }, [chartReady, indicatorVisibility.rsi, rsiSettings])
 
@@ -856,7 +1381,7 @@ export function BitcoinCandleChart({
       return
     }
 
-    const pane = createCipherBSeries(chart, cipherSettings, rsiSeriesRef.current ? 2 : 1)
+    const pane = createCipherBSeries(chart, cipherSettings, appendOscillatorPaneIndex(chart))
     cipherWt1Ref.current = pane.wt1
     cipherWt2Ref.current = pane.wt2
     cipherDiffRef.current = pane.diff
@@ -864,30 +1389,102 @@ export function BitcoinCandleChart({
     if (candlesRef.current.length > 0) {
       paintCipherBSeries(pane, candlesRef.current, cipherSettings)
     }
-    applyOscillatorPaneStretch(chart)
+    layoutOscillatorPanes(chart, getRsiPane(), pane, getTvMacdPane(), getMacdPane())
 
     return () => {
       const activeChart = chartRef.current
-      if (activeChart) {
-        removeCipherBSeries(activeChart, pane)
-        pruneEmptyOscillatorPanes(activeChart)
-        applyOscillatorPaneStretch(activeChart)
-      }
       if (cipherWt1Ref.current === pane.wt1) {
         cipherWt1Ref.current = null
         cipherWt2Ref.current = null
         cipherDiffRef.current = null
         cipherMarkersRef.current = null
       }
+      if (activeChart) {
+        removeCipherBSeries(activeChart, pane)
+        layoutOscillatorPanes(activeChart, getRsiPane(), null, getTvMacdPane(), getMacdPane())
+      }
     }
   }, [chartReady, indicatorVisibility.cipherB, cipherSettings])
 
   useEffect(() => {
+    const chart = chartRef.current
+    if (!chartReady || !chart || !indicatorVisibility.macd) {
+      return
+    }
+
+    const pane = createTvMacdSeries(chart, appendOscillatorPaneIndex(chart))
+    tvMacdHistogramRef.current = pane.histogram
+    tvMacdLineRef.current = pane.macd
+    tvMacdSignalRef.current = pane.signal
+    if (candlesRef.current.length > 0) {
+      paintTvMacdSeries(pane, candlesRef.current, tvMacdSettings)
+    }
+    layoutOscillatorPanes(chart, getRsiPane(), getCipherPane(), pane, getMacdPane())
+
+    return () => {
+      const activeChart = chartRef.current
+      if (tvMacdHistogramRef.current === pane.histogram) {
+        tvMacdHistogramRef.current = null
+        tvMacdLineRef.current = null
+        tvMacdSignalRef.current = null
+      }
+      if (activeChart) {
+        removeTvMacdSeries(activeChart, pane)
+        layoutOscillatorPanes(activeChart, getRsiPane(), getCipherPane(), null, getMacdPane())
+      }
+    }
+  }, [chartReady, indicatorVisibility.macd, tvMacdSettings])
+
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chartReady || !chart || !indicatorVisibility.cmMacd) {
+      return
+    }
+
+    const pane = createMacdSeries(chart, appendOscillatorPaneIndex(chart))
+    macdHistogramRef.current = pane.histogram
+    macdLineRef.current = pane.macd
+    macdSignalRef.current = pane.signal
+    macdMarkersRef.current = pane.markers
+    if (candlesRef.current.length > 0) {
+      paintMacdSeries(pane, candlesRef.current, macdSettings, timeframeRef.current)
+    }
+    layoutOscillatorPanes(chart, getRsiPane(), getCipherPane(), getTvMacdPane(), pane)
+
+    return () => {
+      const activeChart = chartRef.current
+      if (macdHistogramRef.current === pane.histogram) {
+        macdHistogramRef.current = null
+        macdLineRef.current = null
+        macdSignalRef.current = null
+        macdMarkersRef.current = null
+      }
+      if (activeChart) {
+        removeMacdSeries(activeChart, pane)
+        layoutOscillatorPanes(activeChart, getRsiPane(), getCipherPane(), getTvMacdPane(), null)
+      }
+    }
+  }, [chartReady, indicatorVisibility.cmMacd, macdSettings])
+
+  useEffect(() => {
     const series = seriesRef.current
-    const nweUpper = nweUpperRef.current
-    const nweLower = nweLowerRef.current
-    const nweMarkers = nweMarkersRef.current
-    if (!series || !nweUpper || !nweLower || !nweMarkers) {
+    const la_nweUpper = la_nweUpperRef.current
+    const la_nweLower = la_nweLowerRef.current
+    const la_nweMarkers = la_nweMarkersRef.current
+    const smaMa = smaMaRef.current
+    const smaSmoothing = smaSmoothingRef.current
+    const smaBbUpper = smaBbUpperRef.current
+    const smaBbLower = smaBbLowerRef.current
+    if (
+      !series ||
+      !la_nweUpper ||
+      !la_nweLower ||
+      !la_nweMarkers ||
+      !smaMa ||
+      !smaSmoothing ||
+      !smaBbUpper ||
+      !smaBbLower
+    ) {
       return
     }
 
@@ -924,6 +1521,17 @@ export function BitcoinCandleChart({
       return { wt1, wt2, diff, markers }
     }
 
+    const readMacdPane = (): MacdPaneSeries | null => {
+      const histogram = macdHistogramRef.current
+      const macd = macdLineRef.current
+      const signal = macdSignalRef.current
+      const markers = macdMarkersRef.current
+      if (!histogram || !macd || !signal || !markers) {
+        return null
+      }
+      return { histogram, macd, signal, markers }
+    }
+
     const paintRsi = (candles: Candle[]) => {
       const pane = readRsiPane()
       if (!indicatorVisibilityRef.current.rsi || !pane) {
@@ -940,26 +1548,44 @@ export function BitcoinCandleChart({
       paintCipherBSeries(pane, candles, cipherSettingsRef.current)
     }
 
-    const paintNwe = (candles: Candle[]) => {
-      if (!indicatorVisibilityRef.current.nwe) {
-        nweMarkers.setMarkers([])
+    const paintMacd = (candles: Candle[]) => {
+      const pane = readMacdPane()
+      if (!indicatorVisibilityRef.current.cmMacd || !pane) {
+        return
+      }
+      paintMacdSeries(pane, candles, macdSettingsRef.current, timeframeRef.current)
+    }
+
+    const paintTvMacd = (candles: Candle[]) => {
+      const histogram = tvMacdHistogramRef.current
+      const macd = tvMacdLineRef.current
+      const signal = tvMacdSignalRef.current
+      if (!indicatorVisibilityRef.current.macd || !histogram || !macd || !signal) {
+        return
+      }
+      paintTvMacdSeries({ histogram, macd, signal }, candles, tvMacdSettingsRef.current)
+    }
+
+    const paintLaNwe = (candles: Candle[]) => {
+      if (!indicatorVisibilityRef.current.la_nwe) {
+        la_nweMarkers.setMarkers([])
         return
       }
 
-      const result = calculateNadarayaWatsonEnvelope(candles, nweSettingsRef.current)
-      nweUpper.setData(
+      const result = calculateLaNwe(candles, la_nweSettingsRef.current)
+      la_nweUpper.setData(
         result.points.map((point) => ({
           time: point.time as UTCTimestamp,
           value: point.upper,
         })),
       )
-      nweLower.setData(
+      la_nweLower.setData(
         result.points.map((point) => ({
           time: point.time as UTCTimestamp,
           value: point.lower,
         })),
       )
-      nweMarkers.setMarkers(
+      la_nweMarkers.setMarkers(
         result.crosses.map((cross) =>
           cross.direction === 'down'
             ? {
@@ -978,6 +1604,21 @@ export function BitcoinCandleChart({
       )
     }
 
+    const paintSma = (candles: Candle[]) => {
+      if (!indicatorVisibilityRef.current.sma) {
+        smaMa.setData([])
+        smaSmoothing.setData([])
+        smaBbUpper.setData([])
+        smaBbLower.setData([])
+        return
+      }
+      paintSmaOverlay(
+        { ma: smaMa, smoothing: smaSmoothing, bbUpper: smaBbUpper, bbLower: smaBbLower },
+        candles,
+        smaSettingsRef.current,
+      )
+    }
+
     const paintHistory = (candles: Candle[]) => {
       series.setData(
         candles.map((candle) => ({
@@ -990,7 +1631,10 @@ export function BitcoinCandleChart({
       )
       paintRsi(candles)
       paintCipherB(candles)
-      paintNwe(candles)
+      paintTvMacd(candles)
+      paintMacd(candles)
+      paintLaNwe(candles)
+      paintSma(candles)
     }
 
     const paintLive = (candles: Candle[], candle: Candle) => {
@@ -1003,7 +1647,17 @@ export function BitcoinCandleChart({
       })
       paintRsi(candles)
       paintCipherB(candles)
-      paintNwe(candles)
+      paintTvMacd(candles)
+      paintMacd(candles)
+      paintLaNwe(candles)
+      paintSma(candles)
+      const last = candles.at(-1) ?? null
+      setHoverCandle((current) => {
+        if (!current || !last || current.time === last.time) {
+          return last
+        }
+        return current
+      })
     }
 
     void fetchCandles(pair, timeframe, controller.signal)
@@ -1015,6 +1669,7 @@ export function BitcoinCandleChart({
         const candles = [...history]
         candlesRef.current = candles
         paintHistory(candles)
+        setHoverCandle(candles.at(-1) ?? null)
         setLoading(false)
         chartRef.current?.timeScale().fitContent()
         if (chartRef.current) {
@@ -1064,28 +1719,28 @@ export function BitcoinCandleChart({
   }, [pair, timeframe, chartReady])
 
   useEffect(() => {
-    const nweUpper = nweUpperRef.current
-    const nweLower = nweLowerRef.current
-    const nweMarkers = nweMarkersRef.current
+    const la_nweUpper = la_nweUpperRef.current
+    const la_nweLower = la_nweLowerRef.current
+    const la_nweMarkers = la_nweMarkersRef.current
     const candles = candlesRef.current
-    if (!nweUpper || !nweLower || !nweMarkers || candles.length === 0) {
+    if (!la_nweUpper || !la_nweLower || !la_nweMarkers || candles.length === 0) {
       return
     }
 
-    const result = calculateNadarayaWatsonEnvelope(candles, nweSettings)
-    nweUpper.setData(
+    const result = calculateLaNwe(candles, la_nweSettings)
+    la_nweUpper.setData(
       result.points.map((point) => ({
         time: point.time as UTCTimestamp,
         value: point.upper,
       })),
     )
-    nweLower.setData(
+    la_nweLower.setData(
       result.points.map((point) => ({
         time: point.time as UTCTimestamp,
         value: point.lower,
       })),
     )
-    nweMarkers.setMarkers(
+    la_nweMarkers.setMarkers(
       result.crosses.map((cross) =>
         cross.direction === 'down'
           ? {
@@ -1102,7 +1757,41 @@ export function BitcoinCandleChart({
             },
       ),
     )
-  }, [nweSettings, chartReady, indicatorVisibility])
+  }, [la_nweSettings, chartReady, indicatorVisibility])
+
+  useEffect(() => {
+    const smaMa = smaMaRef.current
+    const smaSmoothing = smaSmoothingRef.current
+    const smaBbUpper = smaBbUpperRef.current
+    const smaBbLower = smaBbLowerRef.current
+    const candles = candlesRef.current
+    if (!smaMa || !smaSmoothing || !smaBbUpper || !smaBbLower) {
+      return
+    }
+
+    const visible = indicatorVisibility.sma
+    smaMa.applyOptions({ visible })
+    smaSmoothing.applyOptions({ visible: visible && smaSettings.smoothingType !== 'None' })
+    const showBands = visible && smaSettings.smoothingType === 'SMA + Bollinger Bands'
+    smaBbUpper.applyOptions({ visible: showBands })
+    smaBbLower.applyOptions({ visible: showBands })
+
+    if (!visible || candles.length === 0) {
+      if (!visible) {
+        smaMa.setData([])
+        smaSmoothing.setData([])
+        smaBbUpper.setData([])
+        smaBbLower.setData([])
+      }
+      return
+    }
+
+    paintSmaOverlay(
+      { ma: smaMa, smoothing: smaSmoothing, bbUpper: smaBbUpper, bbLower: smaBbLower },
+      candles,
+      smaSettings,
+    )
+  }, [smaSettings, chartReady, indicatorVisibility])
 
   useEffect(() => {
     countdownRef.current?.setTimeframe(timeframe)
@@ -1111,26 +1800,29 @@ export function BitcoinCandleChart({
   useEffect(() => {
     if (
       (settingsOpen === 'rsi' && !indicatorVisibility.rsi) ||
-      (settingsOpen === 'nwe' && !indicatorVisibility.nwe) ||
-      (settingsOpen === 'cipherB' && !indicatorVisibility.cipherB)
+      (settingsOpen === 'la_nwe' && !indicatorVisibility.la_nwe) ||
+      (settingsOpen === 'cipherB' && !indicatorVisibility.cipherB) ||
+      (settingsOpen === 'macd' && !indicatorVisibility.macd) ||
+      (settingsOpen === 'cmMacd' && !indicatorVisibility.cmMacd) ||
+      (settingsOpen === 'sma' && !indicatorVisibility.sma)
     ) {
       setSettingsOpen(null)
     }
   }, [indicatorVisibility, settingsOpen])
 
   useEffect(() => {
-    const nweVisible = indicatorVisibility.nwe
-    nweUpperRef.current?.applyOptions({ visible: nweVisible })
-    nweLowerRef.current?.applyOptions({ visible: nweVisible })
+    const la_nweVisible = indicatorVisibility.la_nwe
+    la_nweUpperRef.current?.applyOptions({ visible: la_nweVisible })
+    la_nweLowerRef.current?.applyOptions({ visible: la_nweVisible })
 
     const candles = candlesRef.current
-    const nweMarkers = nweMarkersRef.current
-    if (!nweMarkers) {
+    const la_nweMarkers = la_nweMarkersRef.current
+    if (!la_nweMarkers) {
       return
     }
 
-    if (!nweVisible) {
-      nweMarkers.setMarkers([])
+    if (!la_nweVisible) {
+      la_nweMarkers.setMarkers([])
       return
     }
 
@@ -1138,8 +1830,8 @@ export function BitcoinCandleChart({
       return
     }
 
-    const result = calculateNadarayaWatsonEnvelope(candles, nweSettingsRef.current)
-    nweMarkers.setMarkers(
+    const result = calculateLaNwe(candles, la_nweSettingsRef.current)
+    la_nweMarkers.setMarkers(
       result.crosses.map((cross) =>
         cross.direction === 'down'
           ? {
@@ -1165,8 +1857,8 @@ export function BitcoinCandleChart({
     }))
   }
 
-  const updateDraftNweSetting = (key: 'bandwidth' | 'multiplier' | 'lookback', value: string) => {
-    setDraftNweSettings((current) => ({
+  const updateDraftLaNweSetting = (key: 'bandwidth' | 'multiplier' | 'lookback', value: string) => {
+    setDraftLaNweSettings((current) => ({
       ...current,
       [key]: Number(value),
     }))
@@ -1179,19 +1871,44 @@ export function BitcoinCandleChart({
     }))
   }
 
+  const updateDraftMacdNumber = (
+    key: 'fastLength' | 'slowLength' | 'signalLength',
+    value: string,
+  ) => {
+    setDraftMacdSettings((current) => ({
+      ...current,
+      [key]: Number(value),
+    }))
+  }
+
   const openRsiSettings = () => {
     setDraftRsiSettings(rsiSettings)
     setSettingsOpen('rsi')
   }
 
-  const openNweSettings = () => {
-    setDraftNweSettings(nweSettings)
-    setSettingsOpen('nwe')
+  const openLaNweSettings = () => {
+    setDraftLaNweSettings(la_nweSettings)
+    setSettingsOpen('la_nwe')
   }
 
   const openCipherSettings = () => {
     setDraftCipherSettings(cipherSettings)
     setSettingsOpen('cipherB')
+  }
+
+  const openTvMacdSettings = () => {
+    setDraftTvMacdSettings(tvMacdSettings)
+    setSettingsOpen('macd')
+  }
+
+  const openMacdSettings = () => {
+    setDraftMacdSettings(macdSettings)
+    setSettingsOpen('cmMacd')
+  }
+
+  const openSmaSettings = () => {
+    setDraftSmaSettings(smaSettings)
+    setSettingsOpen('sma')
   }
 
   const applySettings = () => {
@@ -1200,15 +1917,30 @@ export function BitcoinCandleChart({
       setDraftRsiSettings(next)
       setRsiSettings(next)
     }
-    if (settingsOpen === 'nwe') {
-      const next = normalizeNweSettings(draftNweSettings)
-      setDraftNweSettings(next)
-      setNweSettings(next)
+    if (settingsOpen === 'la_nwe') {
+      const next = normalizeLaNweSettings(draftLaNweSettings)
+      setDraftLaNweSettings(next)
+      setLaNweSettings(next)
     }
     if (settingsOpen === 'cipherB') {
       const next = normalizeCipherBSettings(draftCipherSettings)
       setDraftCipherSettings(next)
       setCipherSettings(next)
+    }
+    if (settingsOpen === 'macd') {
+      const next = normalizeTvMacdSettings(draftTvMacdSettings)
+      setDraftTvMacdSettings(next)
+      setTvMacdSettings(next)
+    }
+    if (settingsOpen === 'cmMacd') {
+      const next = normalizeCmMacdSettings(draftMacdSettings)
+      setDraftMacdSettings(next)
+      setMacdSettings(next)
+    }
+    if (settingsOpen === 'sma') {
+      const next = normalizeSmaSettings(draftSmaSettings)
+      setDraftSmaSettings(next)
+      setSmaSettings(next)
     }
     setSettingsOpen(null)
   }
@@ -1217,20 +1949,78 @@ export function BitcoinCandleChart({
     if (settingsOpen === 'rsi') {
       setDraftRsiSettings(DEFAULT_RSI_SETTINGS)
     }
-    if (settingsOpen === 'nwe') {
-      setDraftNweSettings(DEFAULT_NWE_SETTINGS)
+    if (settingsOpen === 'la_nwe') {
+      setDraftLaNweSettings(DEFAULT_LA_NWE_SETTINGS)
     }
     if (settingsOpen === 'cipherB') {
       setDraftCipherSettings(DEFAULT_CIPHER_B_SETTINGS)
     }
+    if (settingsOpen === 'macd') {
+      setDraftTvMacdSettings(DEFAULT_TV_MACD_SETTINGS)
+    }
+    if (settingsOpen === 'cmMacd') {
+      setDraftMacdSettings(DEFAULT_CM_MACD_SETTINGS)
+    }
+    if (settingsOpen === 'sma') {
+      setDraftSmaSettings(DEFAULT_SMA_SETTINGS)
+    }
   }
+
+  const oscillatorStack = (id: 'rsi' | 'cipherB' | 'macd' | 'cmMacd') => {
+    const order = ['rsi', 'cipherB', 'macd', 'cmMacd'] as const
+    const start = order.indexOf(id)
+    return order.slice(start + 1).filter((item) => indicatorVisibility[item]).length
+  }
+
+  const oscillatorStackClass = (kind: 'indicator-gear' | 'settings', count: number) => {
+    if (count >= 3) {
+      return `bitcoin-chart__${kind}--stack-3`
+    }
+    if (count === 2) {
+      return `bitcoin-chart__${kind}--stack-2`
+    }
+    if (count === 1) {
+      return `bitcoin-chart__${kind}--stack-1`
+    }
+    return ''
+  }
+
+  const hoverStats = hoverCandle ? candleChange(hoverCandle, candlesRef.current) : null
 
   return (
     <div className="bitcoin-chart">
       <div className="bitcoin-chart__header">
-        <span className="bitcoin-chart__title">
-          {pair.symbol} · Japanese candles
-        </span>
+        <div className="bitcoin-chart__legend">
+          <span className="bitcoin-chart__title">
+            {pair.symbol} · {TIMEFRAMES.find((item) => item.id === timeframe)?.label ?? timeframe}
+          </span>
+          {hoverCandle && hoverStats ? (
+            <span className={hoverStats.up ? 'bitcoin-chart__ohlc is-up' : 'bitcoin-chart__ohlc is-down'}>
+              <span>
+                O <strong>{formatLastPrice(hoverCandle.open)}</strong>
+              </span>
+              <span>
+                H <strong>{formatLastPrice(hoverCandle.high)}</strong>
+              </span>
+              <span>
+                L <strong>{formatLastPrice(hoverCandle.low)}</strong>
+              </span>
+              <span>
+                C <strong>{formatLastPrice(hoverCandle.close)}</strong>
+              </span>
+              <span className="bitcoin-chart__ohlc-change">
+                {hoverStats.delta >= 0 ? '+' : ''}
+                {formatLastPrice(hoverStats.delta)} ({hoverStats.percent >= 0 ? '+' : ''}
+                {hoverStats.percent.toFixed(2)}%)
+              </span>
+              {hoverCandle.volume !== undefined ? (
+                <span>
+                  Vol <strong>{formatVolume(hoverCandle.volume)}</strong>
+                </span>
+              ) : null}
+            </span>
+          ) : null}
+        </div>
         <div className="bitcoin-chart__timeframes" role="tablist" aria-label="Timeframes">
           {TIMEFRAMES.map((item) => (
             <button
@@ -1259,11 +2049,26 @@ export function BitcoinCandleChart({
             <span>Loading chart...</span>
           </div>
         ) : null}
-        {indicatorVisibility.nwe ? (
+        {indicatorVisibility.sma ? (
           <button
             type="button"
-            className="bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--nwe"
-            onClick={openNweSettings}
+            className="bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--sma"
+            onClick={openSmaSettings}
+            aria-label="SMA settings"
+            title="SMA settings"
+          >
+            ⚙
+          </button>
+        ) : null}
+        {indicatorVisibility.la_nwe ? (
+          <button
+            type="button"
+            className={
+              indicatorVisibility.sma
+                ? 'bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--la_nwe bitcoin-chart__indicator-gear--la_nwe-below-sma'
+                : 'bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--la_nwe'
+            }
+            onClick={openLaNweSettings}
             aria-label="Nadaraya-Watson Envelope settings"
             title="Nadaraya-Watson Envelope settings"
           >
@@ -1273,11 +2078,13 @@ export function BitcoinCandleChart({
         {indicatorVisibility.rsi ? (
           <button
             type="button"
-            className={
-              indicatorVisibility.cipherB
-                ? 'bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--rsi bitcoin-chart__indicator-gear--rsi-raised'
-                : 'bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--rsi'
-            }
+            className={[
+              'bitcoin-chart__indicator-gear',
+              'bitcoin-chart__indicator-gear--rsi',
+              oscillatorStackClass('indicator-gear', oscillatorStack('rsi')),
+            ]
+              .filter(Boolean)
+              .join(' ')}
             onClick={openRsiSettings}
             aria-label="Better RSI settings"
             title="Better RSI settings"
@@ -1288,7 +2095,13 @@ export function BitcoinCandleChart({
         {indicatorVisibility.cipherB ? (
           <button
             type="button"
-            className="bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--cipher"
+            className={[
+              'bitcoin-chart__indicator-gear',
+              'bitcoin-chart__indicator-gear--cipher',
+              oscillatorStackClass('indicator-gear', oscillatorStack('cipherB')),
+            ]
+              .filter(Boolean)
+              .join(' ')}
             onClick={openCipherSettings}
             aria-label="Cipher_B_free settings"
             title="Cipher_B_free settings"
@@ -1296,13 +2109,43 @@ export function BitcoinCandleChart({
             ⚙
           </button>
         ) : null}
+        {indicatorVisibility.macd ? (
+          <button
+            type="button"
+            className={[
+              'bitcoin-chart__indicator-gear',
+              'bitcoin-chart__indicator-gear--tv-macd',
+              oscillatorStackClass('indicator-gear', oscillatorStack('macd')),
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            onClick={openTvMacdSettings}
+            aria-label="MACD settings"
+            title="MACD settings"
+          >
+            ⚙
+          </button>
+        ) : null}
+        {indicatorVisibility.cmMacd ? (
+          <button
+            type="button"
+            className="bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--macd"
+            onClick={openMacdSettings}
+            aria-label="CM_Ult_MacD_MTF settings"
+            title="CM_Ult_MacD_MTF settings"
+          >
+            ⚙
+          </button>
+        ) : null}
         {settingsOpen === 'rsi' ? (
           <div
-            className={
-              indicatorVisibility.cipherB
-                ? 'bitcoin-chart__settings bitcoin-chart__settings--rsi bitcoin-chart__settings--rsi-raised'
-                : 'bitcoin-chart__settings bitcoin-chart__settings--rsi'
-            }
+            className={[
+              'bitcoin-chart__settings',
+              'bitcoin-chart__settings--rsi',
+              oscillatorStackClass('settings', oscillatorStack('rsi')),
+            ]
+              .filter(Boolean)
+              .join(' ')}
           >
             <p className="bitcoin-chart__settings-title">Better RSI</p>
             <div className="bitcoin-chart__settings-grid">
@@ -1383,8 +2226,14 @@ export function BitcoinCandleChart({
             </div>
           </div>
         ) : null}
-        {settingsOpen === 'nwe' ? (
-          <div className="bitcoin-chart__settings bitcoin-chart__settings--nwe">
+        {settingsOpen === 'la_nwe' ? (
+          <div
+            className={
+              indicatorVisibility.sma
+                ? 'bitcoin-chart__settings bitcoin-chart__settings--la_nwe bitcoin-chart__settings--la_nwe-below-sma'
+                : 'bitcoin-chart__settings bitcoin-chart__settings--la_nwe'
+            }
+          >
             <p className="bitcoin-chart__settings-title">Nadaraya-Watson Envelope</p>
             <div className="bitcoin-chart__settings-grid">
               <label>
@@ -1393,8 +2242,8 @@ export function BitcoinCandleChart({
                   type="number"
                   min="0.1"
                   step="0.1"
-                  value={draftNweSettings.bandwidth}
-                  onChange={(event) => updateDraftNweSetting('bandwidth', event.target.value)}
+                  value={draftLaNweSettings.bandwidth}
+                  onChange={(event) => updateDraftLaNweSetting('bandwidth', event.target.value)}
                 />
               </label>
               <label>
@@ -1403,8 +2252,8 @@ export function BitcoinCandleChart({
                   type="number"
                   min="0"
                   step="0.1"
-                  value={draftNweSettings.multiplier}
-                  onChange={(event) => updateDraftNweSetting('multiplier', event.target.value)}
+                  value={draftLaNweSettings.multiplier}
+                  onChange={(event) => updateDraftLaNweSetting('multiplier', event.target.value)}
                 />
               </label>
               <label>
@@ -1413,17 +2262,17 @@ export function BitcoinCandleChart({
                   type="number"
                   min="2"
                   max="2000"
-                  value={draftNweSettings.lookback}
-                  onChange={(event) => updateDraftNweSetting('lookback', event.target.value)}
+                  value={draftLaNweSettings.lookback}
+                  onChange={(event) => updateDraftLaNweSetting('lookback', event.target.value)}
                 />
               </label>
               <label className="bitcoin-chart__settings-check">
                 <span>Repainting smoothing</span>
                 <input
                   type="checkbox"
-                  checked={draftNweSettings.repaint}
+                  checked={draftLaNweSettings.repaint}
                   onChange={(event) =>
-                    setDraftNweSettings((current) => ({
+                    setDraftLaNweSettings((current) => ({
                       ...current,
                       repaint: event.target.checked,
                     }))
@@ -1448,8 +2297,135 @@ export function BitcoinCandleChart({
             </div>
           </div>
         ) : null}
+        {settingsOpen === 'sma' ? (
+          <div className="bitcoin-chart__settings bitcoin-chart__settings--sma">
+            <p className="bitcoin-chart__settings-title">SMA</p>
+            <div className="bitcoin-chart__settings-grid">
+              <label>
+                <span>Length</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={draftSmaSettings.length}
+                  onChange={(event) =>
+                    setDraftSmaSettings((current) => ({
+                      ...current,
+                      length: Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                <span>Source</span>
+                <select
+                  value={draftSmaSettings.source}
+                  onChange={(event) =>
+                    setDraftSmaSettings((current) => ({
+                      ...current,
+                      source: event.target.value as (typeof SMA_SOURCES)[number],
+                    }))
+                  }
+                >
+                  {SMA_SOURCES.map((source) => (
+                    <option key={source} value={source}>
+                      {source}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Offset</span>
+                <input
+                  type="number"
+                  min="-500"
+                  max="500"
+                  value={draftSmaSettings.offset}
+                  onChange={(event) =>
+                    setDraftSmaSettings((current) => ({
+                      ...current,
+                      offset: Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                <span>Smoothing type</span>
+                <select
+                  value={draftSmaSettings.smoothingType}
+                  onChange={(event) =>
+                    setDraftSmaSettings((current) => ({
+                      ...current,
+                      smoothingType: event.target.value as (typeof SMA_SMOOTHING_TYPES)[number],
+                    }))
+                  }
+                >
+                  {SMA_SMOOTHING_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Smoothing length</span>
+                <input
+                  type="number"
+                  min="1"
+                  disabled={draftSmaSettings.smoothingType === 'None'}
+                  value={draftSmaSettings.smoothingLength}
+                  onChange={(event) =>
+                    setDraftSmaSettings((current) => ({
+                      ...current,
+                      smoothingLength: Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                <span>BB StdDev</span>
+                <input
+                  type="number"
+                  min="0.001"
+                  max="50"
+                  step="0.5"
+                  disabled={draftSmaSettings.smoothingType !== 'SMA + Bollinger Bands'}
+                  value={draftSmaSettings.bbStdDev}
+                  onChange={(event) =>
+                    setDraftSmaSettings((current) => ({
+                      ...current,
+                      bbStdDev: Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+            </div>
+            <div className="bitcoin-chart__settings-actions">
+              <button type="button" className="bitcoin-chart__settings-button" onClick={resetSettings}>
+                Defaults
+              </button>
+              <button type="button" className="bitcoin-chart__settings-button" onClick={() => setSettingsOpen(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="bitcoin-chart__settings-button bitcoin-chart__settings-button--primary"
+                onClick={applySettings}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        ) : null}
         {settingsOpen === 'cipherB' ? (
-          <div className="bitcoin-chart__settings bitcoin-chart__settings--cipher">
+          <div
+            className={[
+              'bitcoin-chart__settings',
+              'bitcoin-chart__settings--cipher',
+              oscillatorStackClass('settings', oscillatorStack('cipherB')),
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
             <p className="bitcoin-chart__settings-title">Cipher_B_free</p>
             <div className="bitcoin-chart__settings-grid">
               <label>
@@ -1500,6 +2476,278 @@ export function BitcoinCandleChart({
                   type="number"
                   value={draftCipherSettings.oversold2}
                   onChange={(event) => updateDraftCipherSetting('oversold2', event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="bitcoin-chart__settings-actions">
+              <button type="button" className="bitcoin-chart__settings-button" onClick={resetSettings}>
+                Defaults
+              </button>
+              <button type="button" className="bitcoin-chart__settings-button" onClick={() => setSettingsOpen(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="bitcoin-chart__settings-button bitcoin-chart__settings-button--primary"
+                onClick={applySettings}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {settingsOpen === 'macd' ? (
+          <div
+            className={[
+              'bitcoin-chart__settings',
+              'bitcoin-chart__settings--tv-macd',
+              oscillatorStackClass('settings', oscillatorStack('macd')),
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            <p className="bitcoin-chart__settings-title">MACD</p>
+            <div className="bitcoin-chart__settings-grid">
+              <label>
+                <span>Source</span>
+                <select
+                  value={draftTvMacdSettings.source}
+                  onChange={(event) =>
+                    setDraftTvMacdSettings((current) => ({
+                      ...current,
+                      source: event.target.value as (typeof SMA_SOURCES)[number],
+                    }))
+                  }
+                >
+                  {SMA_SOURCES.map((source) => (
+                    <option key={source} value={source}>
+                      {source}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Fast length</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={draftTvMacdSettings.fastLength}
+                  onChange={(event) =>
+                    setDraftTvMacdSettings((current) => ({
+                      ...current,
+                      fastLength: Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                <span>Slow length</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={draftTvMacdSettings.slowLength}
+                  onChange={(event) =>
+                    setDraftTvMacdSettings((current) => ({
+                      ...current,
+                      slowLength: Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                <span>Signal length</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={draftTvMacdSettings.signalLength}
+                  onChange={(event) =>
+                    setDraftTvMacdSettings((current) => ({
+                      ...current,
+                      signalLength: Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                <span>Oscillator MA type</span>
+                <select
+                  value={draftTvMacdSettings.oscillatorType}
+                  onChange={(event) =>
+                    setDraftTvMacdSettings((current) => ({
+                      ...current,
+                      oscillatorType: event.target.value as (typeof TV_MACD_MA_TYPES)[number],
+                    }))
+                  }
+                >
+                  {TV_MACD_MA_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Signal MA type</span>
+                <select
+                  value={draftTvMacdSettings.signalType}
+                  onChange={(event) =>
+                    setDraftTvMacdSettings((current) => ({
+                      ...current,
+                      signalType: event.target.value as (typeof TV_MACD_MA_TYPES)[number],
+                    }))
+                  }
+                >
+                  {TV_MACD_MA_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="bitcoin-chart__settings-actions">
+              <button type="button" className="bitcoin-chart__settings-button" onClick={resetSettings}>
+                Defaults
+              </button>
+              <button type="button" className="bitcoin-chart__settings-button" onClick={() => setSettingsOpen(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="bitcoin-chart__settings-button bitcoin-chart__settings-button--primary"
+                onClick={applySettings}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {settingsOpen === 'cmMacd' ? (
+          <div className="bitcoin-chart__settings bitcoin-chart__settings--macd">
+            <p className="bitcoin-chart__settings-title">CM_Ult_MacD_MTF</p>
+            <div className="bitcoin-chart__settings-grid">
+              <label className="bitcoin-chart__settings-check">
+                <span>Use Current Chart Resolution?</span>
+                <input
+                  type="checkbox"
+                  checked={draftMacdSettings.useCurrentRes}
+                  onChange={(event) =>
+                    setDraftMacdSettings((current) => ({
+                      ...current,
+                      useCurrentRes: event.target.checked,
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                <span>Use Different Timeframe?</span>
+                <select
+                  value={draftMacdSettings.resCustom}
+                  disabled={draftMacdSettings.useCurrentRes}
+                  onChange={(event) =>
+                    setDraftMacdSettings((current) => ({
+                      ...current,
+                      resCustom: event.target.value as TimeframeId,
+                    }))
+                  }
+                >
+                  {TIMEFRAMES.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Fast Length</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={draftMacdSettings.fastLength}
+                  onChange={(event) => updateDraftMacdNumber('fastLength', event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Slow Length</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={draftMacdSettings.slowLength}
+                  onChange={(event) => updateDraftMacdNumber('slowLength', event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Signal Length</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={draftMacdSettings.signalLength}
+                  onChange={(event) => updateDraftMacdNumber('signalLength', event.target.value)}
+                />
+              </label>
+              <label className="bitcoin-chart__settings-check">
+                <span>Show MacD & Signal Line?</span>
+                <input
+                  type="checkbox"
+                  checked={draftMacdSettings.showMacdSignal}
+                  onChange={(event) =>
+                    setDraftMacdSettings((current) => ({
+                      ...current,
+                      showMacdSignal: event.target.checked,
+                    }))
+                  }
+                />
+              </label>
+              <label className="bitcoin-chart__settings-check">
+                <span>Show Dots When MacD Crosses Signal Line?</span>
+                <input
+                  type="checkbox"
+                  checked={draftMacdSettings.showDots}
+                  onChange={(event) =>
+                    setDraftMacdSettings((current) => ({
+                      ...current,
+                      showDots: event.target.checked,
+                    }))
+                  }
+                />
+              </label>
+              <label className="bitcoin-chart__settings-check">
+                <span>Show Histogram?</span>
+                <input
+                  type="checkbox"
+                  checked={draftMacdSettings.showHistogram}
+                  onChange={(event) =>
+                    setDraftMacdSettings((current) => ({
+                      ...current,
+                      showHistogram: event.target.checked,
+                    }))
+                  }
+                />
+              </label>
+              <label className="bitcoin-chart__settings-check">
+                <span>Change MacD Line Color-Signal Line Cross?</span>
+                <input
+                  type="checkbox"
+                  checked={draftMacdSettings.macdColorChange}
+                  onChange={(event) =>
+                    setDraftMacdSettings((current) => ({
+                      ...current,
+                      macdColorChange: event.target.checked,
+                    }))
+                  }
+                />
+              </label>
+              <label className="bitcoin-chart__settings-check">
+                <span>MacD Histogram 4 Colors?</span>
+                <input
+                  type="checkbox"
+                  checked={draftMacdSettings.histColorChange}
+                  onChange={(event) =>
+                    setDraftMacdSettings((current) => ({
+                      ...current,
+                      histColorChange: event.target.checked,
+                    }))
+                  }
                 />
               </label>
             </div>

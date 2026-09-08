@@ -9,7 +9,7 @@ import type {
 } from 'lightweight-charts'
 import type { CanvasRenderingTarget2D } from 'fancy-canvas'
 
-export type NweSignalMarker = {
+export type LaNweSignalMarker = {
   time: Time
   price: number
   direction: 'up' | 'down'
@@ -17,7 +17,7 @@ export type NweSignalMarker = {
 }
 
 type MarkerState = {
-  markers: NweSignalMarker[]
+  markers: LaNweSignalMarker[]
 }
 
 class TriangleMarkersRenderer implements IPrimitivePaneRenderer {
@@ -87,7 +87,7 @@ class TriangleMarkersPaneView implements IPrimitivePaneView {
   }
 }
 
-export class NweSignalMarkersPrimitive implements ISeriesPrimitive {
+export class LaNweSignalMarkersPrimitive implements ISeriesPrimitive {
   private series: ISeriesApi<SeriesType> | null = null
   private timeToCoordinate: ((time: Time) => number | null) | null = null
   private requestUpdate: (() => void) | null = null
@@ -109,7 +109,7 @@ export class NweSignalMarkersPrimitive implements ISeriesPrimitive {
     this.requestUpdate = null
   }
 
-  setMarkers(markers: NweSignalMarker[]) {
+  setMarkers(markers: LaNweSignalMarker[]) {
     this.state.markers = markers
     this.requestUpdate?.()
   }

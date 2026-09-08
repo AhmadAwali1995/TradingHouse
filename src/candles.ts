@@ -28,6 +28,7 @@ export type Candle = {
   high: number
   low: number
   close: number
+  volume?: number
 }
 
 type BinanceKline = [
@@ -78,6 +79,7 @@ function aggregateCandles(
         high: candle.high,
         low: candle.low,
         close: candle.close,
+        volume: candle.volume ?? 0,
       })
       continue
     }
@@ -85,6 +87,7 @@ function aggregateCandles(
     bucket.high = Math.max(bucket.high, candle.high)
     bucket.low = Math.min(bucket.low, candle.low)
     bucket.close = candle.close
+    bucket.volume = (bucket.volume ?? 0) + (candle.volume ?? 0)
   }
 
   return [...buckets.values()]
@@ -97,6 +100,7 @@ function parseKlines(klines: BinanceKline[]): Candle[] {
     high: Number(kline[2]),
     low: Number(kline[3]),
     close: Number(kline[4]),
+    volume: Number(kline[5]),
   }))
 }
 
@@ -186,6 +190,7 @@ export function mergeIntoBucket(
       high: candle.high,
       low: candle.low,
       close: candle.close,
+      volume: candle.volume ?? 0,
     }
   }
 
@@ -195,6 +200,7 @@ export function mergeIntoBucket(
     high: Math.max(current.high, candle.high),
     low: Math.min(current.low, candle.low),
     close: candle.close,
+    volume: (current.volume ?? 0) + (candle.volume ?? 0),
   }
 }
 

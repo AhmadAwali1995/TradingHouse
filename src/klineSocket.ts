@@ -16,6 +16,7 @@ type BinanceKlineMessage = {
     h: string
     l: string
     c: string
+    v?: string
   }
 }
 
@@ -41,6 +42,7 @@ function parseStreamCandle(payload: string): Candle | null {
       high: Number(kline.h),
       low: Number(kline.l),
       close: Number(kline.c),
+      volume: kline.v === undefined ? 0 : Number(kline.v),
     }
   } catch {
     return null

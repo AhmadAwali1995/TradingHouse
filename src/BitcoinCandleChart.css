@@ -18,8 +18,42 @@
   border-bottom: 1px solid #2a2e39;
 }
 
+.bitcoin-chart__legend {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
 .bitcoin-chart__title {
   white-space: nowrap;
+}
+
+.bitcoin-chart__ohlc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #868993;
+}
+
+.bitcoin-chart__ohlc strong {
+  font-weight: 600;
+  color: #d1d4dc;
+}
+
+.bitcoin-chart__ohlc.is-up strong,
+.bitcoin-chart__ohlc.is-up .bitcoin-chart__ohlc-change {
+  color: #26a69a;
+}
+
+.bitcoin-chart__ohlc.is-down strong,
+.bitcoin-chart__ohlc.is-down .bitcoin-chart__ohlc-change {
+  color: #ef5350;
 }
 
 .bitcoin-chart__timeframes {
@@ -134,14 +168,53 @@
   bottom: 28%;
 }
 
+.bitcoin-chart__indicator-gear--rsi-raised-high {
+  bottom: 42%;
+}
+
+.bitcoin-chart__indicator-gear--stack-1 {
+  bottom: 28%;
+}
+
+.bitcoin-chart__indicator-gear--stack-2 {
+  bottom: 42%;
+}
+
+.bitcoin-chart__indicator-gear--stack-3 {
+  bottom: 56%;
+}
+
 .bitcoin-chart__indicator-gear--cipher {
   right: 16px;
   bottom: 86px;
 }
 
-.bitcoin-chart__indicator-gear--nwe {
+.bitcoin-chart__indicator-gear--cipher-raised {
+  bottom: 28%;
+}
+
+.bitcoin-chart__indicator-gear--macd {
+  right: 16px;
+  bottom: 86px;
+}
+
+.bitcoin-chart__indicator-gear--tv-macd {
+  right: 16px;
+  bottom: 86px;
+}
+
+.bitcoin-chart__indicator-gear--sma {
   top: 8px;
   right: 16px;
+}
+
+.bitcoin-chart__indicator-gear--la_nwe {
+  top: 8px;
+  right: 16px;
+}
+
+.bitcoin-chart__indicator-gear--la_nwe-below-sma {
+  top: 36px;
 }
 
 .bitcoin-chart__viewport:hover .bitcoin-chart__indicator-gear,
@@ -174,15 +247,58 @@
   bottom: 32%;
 }
 
+.bitcoin-chart__settings--rsi-raised-high {
+  bottom: 46%;
+}
+
+.bitcoin-chart__settings--stack-1 {
+  bottom: 32%;
+}
+
+.bitcoin-chart__settings--stack-2 {
+  bottom: 46%;
+}
+
+.bitcoin-chart__settings--stack-3 {
+  bottom: 60%;
+}
+
 .bitcoin-chart__settings--cipher {
   right: 12px;
   bottom: 116px;
 }
 
-.bitcoin-chart__settings--nwe {
+.bitcoin-chart__settings--cipher-raised {
+  bottom: 32%;
+}
+
+.bitcoin-chart__settings--macd {
+  right: 12px;
+  bottom: 116px;
+  width: 320px;
+}
+
+.bitcoin-chart__settings--tv-macd {
+  right: 12px;
+  bottom: 116px;
+  width: 300px;
+}
+
+.bitcoin-chart__settings--la_nwe {
   top: 40px;
   right: 12px;
   bottom: auto;
+}
+
+.bitcoin-chart__settings--la_nwe-below-sma {
+  top: 68px;
+}
+
+.bitcoin-chart__settings--sma {
+  top: 40px;
+  right: 12px;
+  bottom: auto;
+  width: 300px;
 }
 
 .bitcoin-chart__settings-title {
@@ -220,7 +336,12 @@
   white-space: nowrap;
 }
 
-.bitcoin-chart__settings-grid input {
+.bitcoin-chart__settings-check span {
+  white-space: normal;
+}
+
+.bitcoin-chart__settings-grid input,
+.bitcoin-chart__settings-grid select {
   width: 100%;
   padding: 6px 8px;
   border: 1px solid #2a2e39;
@@ -229,6 +350,10 @@
   color: #d1d4dc;
   font: inherit;
   font-size: 12px;
+}
+
+.bitcoin-chart__settings-check input {
+  width: auto;
 }
 
 .bitcoin-chart__settings-actions {

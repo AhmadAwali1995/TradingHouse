@@ -1,39 +1,39 @@
 import type { Candle } from '../../candles'
 
-export const NWE_LOOKBACK = 500
-export const NWE_BANDWIDTH = 8
-export const NWE_MULTIPLIER = 3
+export const LA_NWE_LOOKBACK = 500
+export const LA_NWE_BANDWIDTH = 8
+export const LA_NWE_MULTIPLIER = 3
 
-export type NweSettings = {
+export type LaNweSettings = {
   bandwidth: number
   multiplier: number
   lookback: number
   repaint: boolean
 }
 
-export const DEFAULT_NWE_SETTINGS: NweSettings = {
-  bandwidth: NWE_BANDWIDTH,
-  multiplier: NWE_MULTIPLIER,
-  lookback: NWE_LOOKBACK,
+export const DEFAULT_LA_NWE_SETTINGS: LaNweSettings = {
+  bandwidth: LA_NWE_BANDWIDTH,
+  multiplier: LA_NWE_MULTIPLIER,
+  lookback: LA_NWE_LOOKBACK,
   repaint: true,
 }
 
-export type NwePoint = {
+export type LaNwePoint = {
   time: number
   middle: number
   upper: number
   lower: number
 }
 
-export type NweCross = {
+export type LaNweCross = {
   time: number
   price: number
   direction: 'up' | 'down'
 }
 
-export type NweResult = {
-  points: NwePoint[]
-  crosses: NweCross[]
+export type LaNweResult = {
+  points: LaNwePoint[]
+  crosses: LaNweCross[]
 }
 
 function gauss(distance: number, bandwidth: number): number {
@@ -45,8 +45,8 @@ function collectCrosses(
   src: number[],
   upper: number[],
   lower: number[],
-): NweCross[] {
-  const crosses: NweCross[] = []
+): LaNweCross[] {
+  const crosses: LaNweCross[] = []
 
   for (let index = 1; index < src.length; index += 1) {
     const previousClose = src[index - 1]
@@ -73,7 +73,7 @@ function calculateRepainting(
   bandwidth: number,
   multiplier: number,
   lookback: number,
-): NweResult {
+): LaNweResult {
   const size = candles.length
   if (size < 2) {
     return { points: [], crosses: [] }
@@ -119,7 +119,7 @@ function calculateEndpoint(
   bandwidth: number,
   multiplier: number,
   lookback: number,
-): NweResult {
+): LaNweResult {
   const size = Math.min(lookback, candles.length)
   if (size < 2) {
     return { points: [], crosses: [] }
@@ -139,7 +139,7 @@ function calculateEndpoint(
 
   const smaPeriod = size - 1
   const absDev: number[] = []
-  const points: NwePoint[] = []
+  const points: LaNwePoint[] = []
   const crossCandles: Candle[] = []
   const src: number[] = []
   const upper: number[] = []
@@ -181,7 +181,7 @@ function calculateEndpoint(
   }
 }
 
-export function normalizeNweSettings(settings: NweSettings): NweSettings {
+export function normalizeLaNweSettings(settings: LaNweSettings): LaNweSettings {
   return {
     bandwidth: Math.max(0.1, settings.bandwidth),
     multiplier: Math.max(0, settings.multiplier),
@@ -190,11 +190,11 @@ export function normalizeNweSettings(settings: NweSettings): NweSettings {
   }
 }
 
-export function calculateNadarayaWatsonEnvelope(
+export function calculateLaNwe(
   candles: Candle[],
-  settings: NweSettings = DEFAULT_NWE_SETTINGS,
-): NweResult {
-  const { bandwidth, multiplier, lookback, repaint } = normalizeNweSettings(settings)
+  settings: LaNweSettings = DEFAULT_LA_NWE_SETTINGS,
+): LaNweResult {
+  const { bandwidth, multiplier, lookback, repaint } = normalizeLaNweSettings(settings)
   if (repaint) {
     return calculateRepainting(candles, bandwidth, multiplier, lookback)
   }

@@ -32,10 +32,10 @@
     "api": "binanceKlines"
   },
   {
-    "id": "xrp",
-    "name": "XRP",
-    "symbol": "XRPUSDT",
-    "baseAsset": "XRP",
+    "id": "chainlink",
+    "name": "Chainlink",
+    "symbol": "LINKUSDT",
+    "baseAsset": "LINK",
     "quoteAsset": "USDT",
     "api": "binanceKlines"
   },
@@ -48,10 +48,18 @@
     "api": "binanceKlines"
   },
   {
-    "id": "chainlink",
-    "name": "Chainlink",
-    "symbol": "LINKUSDT",
-    "baseAsset": "LINK",
+    "id": "qnt",
+    "name": "Quant",
+    "symbol": "QNTUSDT",
+    "baseAsset": "QNT",
+    "quoteAsset": "USDT",
+    "api": "binanceKlines"
+  },
+  {
+    "id": "xrp",
+    "name": "XRP",
+    "symbol": "XRPUSDT",
+    "baseAsset": "XRP",
     "quoteAsset": "USDT",
     "api": "binanceKlines"
   }

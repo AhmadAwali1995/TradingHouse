@@ -10,9 +10,12 @@ function App() {
   const [pair, setPair] = useState(DEFAULT_PAIR)
   const [timeframe, setTimeframe] = useState<TimeframeId>('1h')
   const [indicatorVisibility, setIndicatorVisibility] = useState<IndicatorVisibility>({
-    nwe: true,
-    rsi: true,
-    cipherB: true,
+    la_nwe: false,
+    rsi: false,
+    cipherB: false,
+    macd: false,
+    cmMacd: false,
+    sma: false,
   })
 
   return (
