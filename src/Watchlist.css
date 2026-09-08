@@ -145,9 +145,17 @@
   cursor: pointer;
 }
 
-.tv-watchlist__indicator-toggle:hover {
+.tv-watchlist__indicator-toggle:hover,
+.tv-watchlist__indicator-toggle.is-active {
   background: #1e222d;
   color: #d1d4dc;
+}
+
+.tv-watchlist__indicator-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .tv-watchlist__row {

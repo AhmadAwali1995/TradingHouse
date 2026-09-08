@@ -56,12 +56,12 @@ import {
   type SmaSettings,
   type TvMacdSettings,
 } from './indicators'
-import type { IndicatorVisibility } from './indicatorCatalog'
+import type { IndicatorId, IndicatorVisibility } from './indicatorCatalog'
 import { subscribeLiveCandles } from './klineSocket'
 import { LastPriceCountdownPrimitive } from './lastPriceCountdown'
 import { formatLastPrice } from './tickers'
 import { LaNweSignalMarkersPrimitive } from './la_nweSignalMarkers'
-import './BitcoinCandleChart.css'
+import './CandleChart.css'
 
 type LogicalRange = {
   from: number
@@ -967,16 +967,22 @@ function candleChange(candle: Candle, candles: Candle[]) {
   return { delta, percent, up: candle.close >= candle.open }
 }
 
-export function BitcoinCandleChart({
+export function CandleChart({
   pair,
   timeframe,
   indicatorVisibility,
+  settingsOpen,
+  settingsTick,
   onTimeframeChange,
+  onSettingsOpenChange,
 }: {
   pair: Pair
   timeframe: TimeframeId
   indicatorVisibility: IndicatorVisibility
+  settingsOpen: IndicatorId | null
+  settingsTick: number
   onTimeframeChange: (timeframe: TimeframeId) => void
+  onSettingsOpenChange: (indicator: IndicatorId | null) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -1014,9 +1020,6 @@ export function BitcoinCandleChart({
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [hoverCandle, setHoverCandle] = useState<Candle | null>(null)
-  const [settingsOpen, setSettingsOpen] = useState<
-    null | 'rsi' | 'la_nwe' | 'cipherB' | 'macd' | 'cmMacd' | 'sma'
-  >(null)
   const [rsiSettings, setRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
   const [draftRsiSettings, setDraftRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
   const [la_nweSettings, setLaNweSettings] = useState<LaNweSettings>(DEFAULT_LA_NWE_SETTINGS)
@@ -1170,7 +1173,7 @@ export function BitcoinCandleChart({
         borderColor: '#2a2e39',
         timeVisible: true,
         secondsVisible: false,
-        minBarSpacing: 10,
+        minBarSpacing: 2,
       },
       crosshair: {
         mode: CrosshairMode.Normal,
@@ -1229,7 +1232,7 @@ export function BitcoinCandleChart({
       ...smaLineOptions,
       color: SMA_COLORS.ma,
       lastValueVisible: true,
-      title: 'SMA',
+      title: `SMA ${DEFAULT_SMA_SETTINGS.length}`,
     })
     const smaSmoothing = chart.addSeries(LineSeries, {
       ...smaLineOptions,
@@ -1770,7 +1773,7 @@ export function BitcoinCandleChart({
     }
 
     const visible = indicatorVisibility.sma
-    smaMa.applyOptions({ visible })
+    smaMa.applyOptions({ visible, title: `SMA ${smaSettings.length}` })
     smaSmoothing.applyOptions({ visible: visible && smaSettings.smoothingType !== 'None' })
     const showBands = visible && smaSettings.smoothingType === 'SMA + Bollinger Bands'
     smaBbUpper.applyOptions({ visible: showBands })
@@ -1798,17 +1801,25 @@ export function BitcoinCandleChart({
   }, [timeframe, chartReady])
 
   useEffect(() => {
-    if (
-      (settingsOpen === 'rsi' && !indicatorVisibility.rsi) ||
-      (settingsOpen === 'la_nwe' && !indicatorVisibility.la_nwe) ||
-      (settingsOpen === 'cipherB' && !indicatorVisibility.cipherB) ||
-      (settingsOpen === 'macd' && !indicatorVisibility.macd) ||
-      (settingsOpen === 'cmMacd' && !indicatorVisibility.cmMacd) ||
-      (settingsOpen === 'sma' && !indicatorVisibility.sma)
-    ) {
-      setSettingsOpen(null)
+    if (settingsOpen === 'rsi') {
+      setDraftRsiSettings(rsiSettings)
     }
-  }, [indicatorVisibility, settingsOpen])
+    if (settingsOpen === 'la_nwe') {
+      setDraftLaNweSettings(la_nweSettings)
+    }
+    if (settingsOpen === 'cipherB') {
+      setDraftCipherSettings(cipherSettings)
+    }
+    if (settingsOpen === 'macd') {
+      setDraftTvMacdSettings(tvMacdSettings)
+    }
+    if (settingsOpen === 'cmMacd') {
+      setDraftMacdSettings(macdSettings)
+    }
+    if (settingsOpen === 'sma') {
+      setDraftSmaSettings(smaSettings)
+    }
+  }, [settingsOpen, settingsTick])
 
   useEffect(() => {
     const la_nweVisible = indicatorVisibility.la_nwe
@@ -1881,34 +1892,38 @@ export function BitcoinCandleChart({
     }))
   }
 
+  const toggleSettings = (indicator: IndicatorId) => {
+    onSettingsOpenChange(settingsOpen === indicator ? null : indicator)
+  }
+
   const openRsiSettings = () => {
     setDraftRsiSettings(rsiSettings)
-    setSettingsOpen('rsi')
+    toggleSettings('rsi')
   }
 
   const openLaNweSettings = () => {
     setDraftLaNweSettings(la_nweSettings)
-    setSettingsOpen('la_nwe')
+    toggleSettings('la_nwe')
   }
 
   const openCipherSettings = () => {
     setDraftCipherSettings(cipherSettings)
-    setSettingsOpen('cipherB')
+    toggleSettings('cipherB')
   }
 
   const openTvMacdSettings = () => {
     setDraftTvMacdSettings(tvMacdSettings)
-    setSettingsOpen('macd')
+    toggleSettings('macd')
   }
 
   const openMacdSettings = () => {
     setDraftMacdSettings(macdSettings)
-    setSettingsOpen('cmMacd')
+    toggleSettings('cmMacd')
   }
 
   const openSmaSettings = () => {
     setDraftSmaSettings(smaSettings)
-    setSettingsOpen('sma')
+    toggleSettings('sma')
   }
 
   const applySettings = () => {
@@ -1942,7 +1957,7 @@ export function BitcoinCandleChart({
       setDraftSmaSettings(next)
       setSmaSettings(next)
     }
-    setSettingsOpen(null)
+    onSettingsOpenChange(null)
   }
 
   const resetSettings = () => {
@@ -1972,30 +1987,34 @@ export function BitcoinCandleChart({
     return order.slice(start + 1).filter((item) => indicatorVisibility[item]).length
   }
 
-  const oscillatorStackClass = (kind: 'indicator-gear' | 'settings', count: number) => {
+  const oscillatorStackClass = (count: number) => {
     if (count >= 3) {
-      return `bitcoin-chart__${kind}--stack-3`
+      return 'candle-chart__indicator-gear--stack-3'
     }
     if (count === 2) {
-      return `bitcoin-chart__${kind}--stack-2`
+      return 'candle-chart__indicator-gear--stack-2'
     }
     if (count === 1) {
-      return `bitcoin-chart__${kind}--stack-1`
+      return 'candle-chart__indicator-gear--stack-1'
     }
     return ''
   }
 
   const hoverStats = hoverCandle ? candleChange(hoverCandle, candlesRef.current) : null
+  const hoverSma =
+    hoverCandle && indicatorVisibility.sma
+      ? calculateSma(candlesRef.current, smaSettings).find((point) => point.time === hoverCandle.time)
+      : null
 
   return (
-    <div className="bitcoin-chart">
-      <div className="bitcoin-chart__header">
-        <div className="bitcoin-chart__legend">
-          <span className="bitcoin-chart__title">
+    <div className="candle-chart">
+      <div className="candle-chart__header">
+        <div className="candle-chart__legend">
+          <span className="candle-chart__title">
             {pair.symbol} · {TIMEFRAMES.find((item) => item.id === timeframe)?.label ?? timeframe}
           </span>
           {hoverCandle && hoverStats ? (
-            <span className={hoverStats.up ? 'bitcoin-chart__ohlc is-up' : 'bitcoin-chart__ohlc is-down'}>
+            <span className={hoverStats.up ? 'candle-chart__ohlc is-up' : 'candle-chart__ohlc is-down'}>
               <span>
                 O <strong>{formatLastPrice(hoverCandle.open)}</strong>
               </span>
@@ -2008,7 +2027,7 @@ export function BitcoinCandleChart({
               <span>
                 C <strong>{formatLastPrice(hoverCandle.close)}</strong>
               </span>
-              <span className="bitcoin-chart__ohlc-change">
+              <span className="candle-chart__ohlc-change">
                 {hoverStats.delta >= 0 ? '+' : ''}
                 {formatLastPrice(hoverStats.delta)} ({hoverStats.percent >= 0 ? '+' : ''}
                 {hoverStats.percent.toFixed(2)}%)
@@ -2020,8 +2039,13 @@ export function BitcoinCandleChart({
               ) : null}
             </span>
           ) : null}
+          {hoverSma ? (
+            <span className="candle-chart__legend-sma">
+              SMA {smaSettings.length} <strong>{formatLastPrice(hoverSma.sma)}</strong>
+            </span>
+          ) : null}
         </div>
-        <div className="bitcoin-chart__timeframes" role="tablist" aria-label="Timeframes">
+        <div className="candle-chart__timeframes" role="tablist" aria-label="Timeframes">
           {TIMEFRAMES.map((item) => (
             <button
               key={item.id}
@@ -2030,8 +2054,8 @@ export function BitcoinCandleChart({
               aria-selected={timeframe === item.id}
               className={
                 timeframe === item.id
-                  ? 'bitcoin-chart__timeframe is-active'
-                  : 'bitcoin-chart__timeframe'
+                  ? 'candle-chart__timeframe is-active'
+                  : 'candle-chart__timeframe'
               }
               onClick={() => onTimeframeChange(item.id)}
             >
@@ -2040,19 +2064,19 @@ export function BitcoinCandleChart({
           ))}
         </div>
       </div>
-      {error ? <p className="bitcoin-chart__error">{error}</p> : null}
-      <div className="bitcoin-chart__viewport">
-        <div className="bitcoin-chart__canvas" ref={containerRef} />
+      {error ? <p className="candle-chart__error">{error}</p> : null}
+      <div className="candle-chart__viewport">
+        <div className="candle-chart__canvas" ref={containerRef} />
         {loading ? (
-          <div className="bitcoin-chart__loading" role="status" aria-live="polite" aria-label="Loading chart data">
-            <span className="bitcoin-chart__loading-spinner" aria-hidden="true" />
+          <div className="candle-chart__loading" role="status" aria-live="polite" aria-label="Loading chart data">
+            <span className="candle-chart__loading-spinner" aria-hidden="true" />
             <span>Loading chart...</span>
           </div>
         ) : null}
         {indicatorVisibility.sma ? (
           <button
             type="button"
-            className="bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--sma"
+            className="candle-chart__indicator-gear candle-chart__indicator-gear--sma"
             onClick={openSmaSettings}
             aria-label="SMA settings"
             title="SMA settings"
@@ -2065,8 +2089,8 @@ export function BitcoinCandleChart({
             type="button"
             className={
               indicatorVisibility.sma
-                ? 'bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--la_nwe bitcoin-chart__indicator-gear--la_nwe-below-sma'
-                : 'bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--la_nwe'
+                ? 'candle-chart__indicator-gear candle-chart__indicator-gear--la_nwe candle-chart__indicator-gear--la_nwe-below-sma'
+                : 'candle-chart__indicator-gear candle-chart__indicator-gear--la_nwe'
             }
             onClick={openLaNweSettings}
             aria-label="Nadaraya-Watson Envelope settings"
@@ -2079,9 +2103,9 @@ export function BitcoinCandleChart({
           <button
             type="button"
             className={[
-              'bitcoin-chart__indicator-gear',
-              'bitcoin-chart__indicator-gear--rsi',
-              oscillatorStackClass('indicator-gear', oscillatorStack('rsi')),
+              'candle-chart__indicator-gear',
+              'candle-chart__indicator-gear--rsi',
+              oscillatorStackClass(oscillatorStack('rsi')),
             ]
               .filter(Boolean)
               .join(' ')}
@@ -2096,9 +2120,9 @@ export function BitcoinCandleChart({
           <button
             type="button"
             className={[
-              'bitcoin-chart__indicator-gear',
-              'bitcoin-chart__indicator-gear--cipher',
-              oscillatorStackClass('indicator-gear', oscillatorStack('cipherB')),
+              'candle-chart__indicator-gear',
+              'candle-chart__indicator-gear--cipher',
+              oscillatorStackClass(oscillatorStack('cipherB')),
             ]
               .filter(Boolean)
               .join(' ')}
@@ -2113,9 +2137,9 @@ export function BitcoinCandleChart({
           <button
             type="button"
             className={[
-              'bitcoin-chart__indicator-gear',
-              'bitcoin-chart__indicator-gear--tv-macd',
-              oscillatorStackClass('indicator-gear', oscillatorStack('macd')),
+              'candle-chart__indicator-gear',
+              'candle-chart__indicator-gear--tv-macd',
+              oscillatorStackClass(oscillatorStack('macd')),
             ]
               .filter(Boolean)
               .join(' ')}
@@ -2129,7 +2153,7 @@ export function BitcoinCandleChart({
         {indicatorVisibility.cmMacd ? (
           <button
             type="button"
-            className="bitcoin-chart__indicator-gear bitcoin-chart__indicator-gear--macd"
+            className="candle-chart__indicator-gear candle-chart__indicator-gear--macd"
             onClick={openMacdSettings}
             aria-label="CM_Ult_MacD_MTF settings"
             title="CM_Ult_MacD_MTF settings"
@@ -2138,17 +2162,9 @@ export function BitcoinCandleChart({
           </button>
         ) : null}
         {settingsOpen === 'rsi' ? (
-          <div
-            className={[
-              'bitcoin-chart__settings',
-              'bitcoin-chart__settings--rsi',
-              oscillatorStackClass('settings', oscillatorStack('rsi')),
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          >
-            <p className="bitcoin-chart__settings-title">Better RSI</p>
-            <div className="bitcoin-chart__settings-grid">
+          <div className="candle-chart__settings candle-chart__settings--rsi">
+            <p className="candle-chart__settings-title">Better RSI</p>
+            <div className="candle-chart__settings-grid">
               <label>
                 <span>Length</span>
                 <input
@@ -2209,16 +2225,16 @@ export function BitcoinCandleChart({
                 />
               </label>
             </div>
-            <div className="bitcoin-chart__settings-actions">
-              <button type="button" className="bitcoin-chart__settings-button" onClick={resetSettings}>
+            <div className="candle-chart__settings-actions">
+              <button type="button" className="candle-chart__settings-button" onClick={resetSettings}>
                 Defaults
               </button>
-              <button type="button" className="bitcoin-chart__settings-button" onClick={() => setSettingsOpen(null)}>
+              <button type="button" className="candle-chart__settings-button" onClick={() => onSettingsOpenChange(null)}>
                 Cancel
               </button>
               <button
                 type="button"
-                className="bitcoin-chart__settings-button bitcoin-chart__settings-button--primary"
+                className="candle-chart__settings-button candle-chart__settings-button--primary"
                 onClick={applySettings}
               >
                 Apply
@@ -2227,15 +2243,9 @@ export function BitcoinCandleChart({
           </div>
         ) : null}
         {settingsOpen === 'la_nwe' ? (
-          <div
-            className={
-              indicatorVisibility.sma
-                ? 'bitcoin-chart__settings bitcoin-chart__settings--la_nwe bitcoin-chart__settings--la_nwe-below-sma'
-                : 'bitcoin-chart__settings bitcoin-chart__settings--la_nwe'
-            }
-          >
-            <p className="bitcoin-chart__settings-title">Nadaraya-Watson Envelope</p>
-            <div className="bitcoin-chart__settings-grid">
+          <div className="candle-chart__settings candle-chart__settings--la_nwe">
+            <p className="candle-chart__settings-title">Nadaraya-Watson Envelope</p>
+            <div className="candle-chart__settings-grid">
               <label>
                 <span>Bandwidth</span>
                 <input
@@ -2266,7 +2276,7 @@ export function BitcoinCandleChart({
                   onChange={(event) => updateDraftLaNweSetting('lookback', event.target.value)}
                 />
               </label>
-              <label className="bitcoin-chart__settings-check">
+              <label className="candle-chart__settings-check">
                 <span>Repainting smoothing</span>
                 <input
                   type="checkbox"
@@ -2280,16 +2290,16 @@ export function BitcoinCandleChart({
                 />
               </label>
             </div>
-            <div className="bitcoin-chart__settings-actions">
-              <button type="button" className="bitcoin-chart__settings-button" onClick={resetSettings}>
+            <div className="candle-chart__settings-actions">
+              <button type="button" className="candle-chart__settings-button" onClick={resetSettings}>
                 Defaults
               </button>
-              <button type="button" className="bitcoin-chart__settings-button" onClick={() => setSettingsOpen(null)}>
+              <button type="button" className="candle-chart__settings-button" onClick={() => onSettingsOpenChange(null)}>
                 Cancel
               </button>
               <button
                 type="button"
-                className="bitcoin-chart__settings-button bitcoin-chart__settings-button--primary"
+                className="candle-chart__settings-button candle-chart__settings-button--primary"
                 onClick={applySettings}
               >
                 Apply
@@ -2298,11 +2308,11 @@ export function BitcoinCandleChart({
           </div>
         ) : null}
         {settingsOpen === 'sma' ? (
-          <div className="bitcoin-chart__settings bitcoin-chart__settings--sma">
-            <p className="bitcoin-chart__settings-title">SMA</p>
-            <div className="bitcoin-chart__settings-grid">
+          <div className="candle-chart__settings candle-chart__settings--sma">
+            <p className="candle-chart__settings-title">SMA</p>
+            <div className="candle-chart__settings-grid">
               <label>
-                <span>Length</span>
+                <span>Candles</span>
                 <input
                   type="number"
                   min="1"
@@ -2399,16 +2409,16 @@ export function BitcoinCandleChart({
                 />
               </label>
             </div>
-            <div className="bitcoin-chart__settings-actions">
-              <button type="button" className="bitcoin-chart__settings-button" onClick={resetSettings}>
+            <div className="candle-chart__settings-actions">
+              <button type="button" className="candle-chart__settings-button" onClick={resetSettings}>
                 Defaults
               </button>
-              <button type="button" className="bitcoin-chart__settings-button" onClick={() => setSettingsOpen(null)}>
+              <button type="button" className="candle-chart__settings-button" onClick={() => onSettingsOpenChange(null)}>
                 Cancel
               </button>
               <button
                 type="button"
-                className="bitcoin-chart__settings-button bitcoin-chart__settings-button--primary"
+                className="candle-chart__settings-button candle-chart__settings-button--primary"
                 onClick={applySettings}
               >
                 Apply
@@ -2417,17 +2427,9 @@ export function BitcoinCandleChart({
           </div>
         ) : null}
         {settingsOpen === 'cipherB' ? (
-          <div
-            className={[
-              'bitcoin-chart__settings',
-              'bitcoin-chart__settings--cipher',
-              oscillatorStackClass('settings', oscillatorStack('cipherB')),
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          >
-            <p className="bitcoin-chart__settings-title">Cipher_B_free</p>
-            <div className="bitcoin-chart__settings-grid">
+          <div className="candle-chart__settings candle-chart__settings--cipher">
+            <p className="candle-chart__settings-title">Cipher_B_free</p>
+            <div className="candle-chart__settings-grid">
               <label>
                 <span>Channel Length</span>
                 <input
@@ -2479,16 +2481,16 @@ export function BitcoinCandleChart({
                 />
               </label>
             </div>
-            <div className="bitcoin-chart__settings-actions">
-              <button type="button" className="bitcoin-chart__settings-button" onClick={resetSettings}>
+            <div className="candle-chart__settings-actions">
+              <button type="button" className="candle-chart__settings-button" onClick={resetSettings}>
                 Defaults
               </button>
-              <button type="button" className="bitcoin-chart__settings-button" onClick={() => setSettingsOpen(null)}>
+              <button type="button" className="candle-chart__settings-button" onClick={() => onSettingsOpenChange(null)}>
                 Cancel
               </button>
               <button
                 type="button"
-                className="bitcoin-chart__settings-button bitcoin-chart__settings-button--primary"
+                className="candle-chart__settings-button candle-chart__settings-button--primary"
                 onClick={applySettings}
               >
                 Apply
@@ -2497,17 +2499,9 @@ export function BitcoinCandleChart({
           </div>
         ) : null}
         {settingsOpen === 'macd' ? (
-          <div
-            className={[
-              'bitcoin-chart__settings',
-              'bitcoin-chart__settings--tv-macd',
-              oscillatorStackClass('settings', oscillatorStack('macd')),
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          >
-            <p className="bitcoin-chart__settings-title">MACD</p>
-            <div className="bitcoin-chart__settings-grid">
+          <div className="candle-chart__settings candle-chart__settings--tv-macd">
+            <p className="candle-chart__settings-title">MACD</p>
+            <div className="candle-chart__settings-grid">
               <label>
                 <span>Source</span>
                 <select
@@ -2605,16 +2599,16 @@ export function BitcoinCandleChart({
                 </select>
               </label>
             </div>
-            <div className="bitcoin-chart__settings-actions">
-              <button type="button" className="bitcoin-chart__settings-button" onClick={resetSettings}>
+            <div className="candle-chart__settings-actions">
+              <button type="button" className="candle-chart__settings-button" onClick={resetSettings}>
                 Defaults
               </button>
-              <button type="button" className="bitcoin-chart__settings-button" onClick={() => setSettingsOpen(null)}>
+              <button type="button" className="candle-chart__settings-button" onClick={() => onSettingsOpenChange(null)}>
                 Cancel
               </button>
               <button
                 type="button"
-                className="bitcoin-chart__settings-button bitcoin-chart__settings-button--primary"
+                className="candle-chart__settings-button candle-chart__settings-button--primary"
                 onClick={applySettings}
               >
                 Apply
@@ -2623,10 +2617,10 @@ export function BitcoinCandleChart({
           </div>
         ) : null}
         {settingsOpen === 'cmMacd' ? (
-          <div className="bitcoin-chart__settings bitcoin-chart__settings--macd">
-            <p className="bitcoin-chart__settings-title">CM_Ult_MacD_MTF</p>
-            <div className="bitcoin-chart__settings-grid">
-              <label className="bitcoin-chart__settings-check">
+          <div className="candle-chart__settings candle-chart__settings--macd">
+            <p className="candle-chart__settings-title">CM_Ult_MacD_MTF</p>
+            <div className="candle-chart__settings-grid">
+              <label className="candle-chart__settings-check">
                 <span>Use Current Chart Resolution?</span>
                 <input
                   type="checkbox"
@@ -2685,7 +2679,7 @@ export function BitcoinCandleChart({
                   onChange={(event) => updateDraftMacdNumber('signalLength', event.target.value)}
                 />
               </label>
-              <label className="bitcoin-chart__settings-check">
+              <label className="candle-chart__settings-check">
                 <span>Show MacD & Signal Line?</span>
                 <input
                   type="checkbox"
@@ -2698,7 +2692,7 @@ export function BitcoinCandleChart({
                   }
                 />
               </label>
-              <label className="bitcoin-chart__settings-check">
+              <label className="candle-chart__settings-check">
                 <span>Show Dots When MacD Crosses Signal Line?</span>
                 <input
                   type="checkbox"
@@ -2711,7 +2705,7 @@ export function BitcoinCandleChart({
                   }
                 />
               </label>
-              <label className="bitcoin-chart__settings-check">
+              <label className="candle-chart__settings-check">
                 <span>Show Histogram?</span>
                 <input
                   type="checkbox"
@@ -2724,7 +2718,7 @@ export function BitcoinCandleChart({
                   }
                 />
               </label>
-              <label className="bitcoin-chart__settings-check">
+              <label className="candle-chart__settings-check">
                 <span>Change MacD Line Color-Signal Line Cross?</span>
                 <input
                   type="checkbox"
@@ -2737,7 +2731,7 @@ export function BitcoinCandleChart({
                   }
                 />
               </label>
-              <label className="bitcoin-chart__settings-check">
+              <label className="candle-chart__settings-check">
                 <span>MacD Histogram 4 Colors?</span>
                 <input
                   type="checkbox"
@@ -2751,16 +2745,16 @@ export function BitcoinCandleChart({
                 />
               </label>
             </div>
-            <div className="bitcoin-chart__settings-actions">
-              <button type="button" className="bitcoin-chart__settings-button" onClick={resetSettings}>
+            <div className="candle-chart__settings-actions">
+              <button type="button" className="candle-chart__settings-button" onClick={resetSettings}>
                 Defaults
               </button>
-              <button type="button" className="bitcoin-chart__settings-button" onClick={() => setSettingsOpen(null)}>
+              <button type="button" className="candle-chart__settings-button" onClick={() => onSettingsOpenChange(null)}>
                 Cancel
               </button>
               <button
                 type="button"
-                className="bitcoin-chart__settings-button bitcoin-chart__settings-button--primary"
+                className="candle-chart__settings-button candle-chart__settings-button--primary"
                 onClick={applySettings}
               >
                 Apply
@@ -2768,22 +2762,22 @@ export function BitcoinCandleChart({
             </div>
           </div>
         ) : null}
-        <div className="bitcoin-chart__controls" aria-label="Chart controls">
-          <button type="button" className="bitcoin-chart__control" onClick={() => zoomRange(1.25)}>
+        <div className="candle-chart__controls" aria-label="Chart controls">
+          <button type="button" className="candle-chart__control" onClick={() => zoomRange(1.25)}>
             -
           </button>
-          <button type="button" className="bitcoin-chart__control" onClick={() => zoomRange(0.8)}>
+          <button type="button" className="candle-chart__control" onClick={() => zoomRange(0.8)}>
             +
           </button>
-          <button type="button" className="bitcoin-chart__control" onClick={() => shiftRange(-1)}>
+          <button type="button" className="candle-chart__control" onClick={() => shiftRange(-1)}>
             &lt;
           </button>
-          <button type="button" className="bitcoin-chart__control" onClick={() => shiftRange(1)}>
+          <button type="button" className="candle-chart__control" onClick={() => shiftRange(1)}>
             &gt;
           </button>
           <button
             type="button"
-            className="bitcoin-chart__control bitcoin-chart__control--reset"
+            className="candle-chart__control candle-chart__control--reset"
             onClick={resetView}
             aria-label="Reset chart view"
             title="Reset chart view"

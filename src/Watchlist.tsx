@@ -20,15 +20,19 @@ export function Watchlist({
   timeframe,
   selectedId,
   indicatorVisibility,
+  settingsOpen,
   onSelect,
   onToggleIndicator,
+  onOpenIndicatorSettings,
 }: {
   pairs: Pair[]
   timeframe: TimeframeId
   selectedId: string
   indicatorVisibility: IndicatorVisibility
+  settingsOpen: IndicatorId | null
   onSelect: (pair: Pair) => void
   onToggleIndicator: (indicator: IndicatorId) => void
+  onOpenIndicatorSettings: (indicator: IndicatorId) => void
 }) {
   const [query, setQuery] = useState('')
   const [tickers, setTickers] = useState<Map<string, PairTicker>>(new Map())
@@ -210,42 +214,67 @@ export function Watchlist({
             return (
               <div key={indicator.id} className="tv-watchlist__indicator-row" role="listitem">
                 <span className="tv-watchlist__indicator-name">{indicator.label}</span>
-                <button
-                  type="button"
-                  className="tv-watchlist__indicator-toggle"
-                  aria-label={`${visible ? 'Hide' : 'Show'} ${indicator.label}`}
-                  aria-pressed={visible}
-                  onClick={() => onToggleIndicator(indicator.id)}
-                >
-                  {visible ? (
+                <div className="tv-watchlist__indicator-actions">
+                  <button
+                    type="button"
+                    className={
+                      settingsOpen === indicator.id
+                        ? 'tv-watchlist__indicator-toggle is-active'
+                        : 'tv-watchlist__indicator-toggle'
+                    }
+                    aria-label={`Edit ${indicator.label} settings`}
+                    title={`${indicator.label} settings`}
+                    aria-pressed={settingsOpen === indicator.id}
+                    onClick={() => onOpenIndicatorSettings(indicator.id)}
+                  >
                     <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
                       <path
-                        d="M10 4c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3C17.5 13.9 14.2 17 10 17S2.5 13.9 1.2 11.1a1.5 1.5 0 0 1 0-1.3C2.5 7.1 5.8 4 10 4Z"
+                        d="M8.2 2.6h3.6l.4 1.7c.4.1.8.3 1.1.6l1.6-.7 1.8 1.8-.7 1.6c.3.3.5.7.6 1.1l1.7.4v3.6l-1.7.4c-.1.4-.3.8-.6 1.1l.7 1.6-1.8 1.8-1.6-.7c-.3.3-.7.5-1.1.6l-.4 1.7H8.2l-.4-1.7c-.4-.1-.8-.3-1.1-.6l-1.6.7-1.8-1.8.7-1.6c-.3-.3-.5-.7-.6-1.1L1.7 11.8V8.2l1.7-.4c.1-.4.3-.8.6-1.1l-.7-1.6 1.8-1.8 1.6.7c.3-.3.7-.5 1.1-.6l.4-1.7Z"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="1.4"
+                        strokeWidth="1.3"
+                        strokeLinejoin="round"
                       />
-                      <circle cx="10" cy="10.5" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+                      <circle cx="10" cy="10" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.3" />
                     </svg>
-                  ) : (
-                    <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
-                      <path
-                        d="M3.2 3.2 16.8 16.8"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.6"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M6.1 6.1A9.3 9.3 0 0 1 10 5c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3a10.5 10.5 0 0 1-3.2 3.7M8.1 15.2A9.5 9.5 0 0 1 10 16c-4.2 0-7.5-3.1-8.8-5.8a1.5 1.5 0 0 1 0-1.3A10.3 10.3 0 0 1 4 5.9"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.4"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  )}
-                </button>
+                  </button>
+                  <button
+                    type="button"
+                    className="tv-watchlist__indicator-toggle"
+                    aria-label={`${visible ? 'Hide' : 'Show'} ${indicator.label}`}
+                    aria-pressed={visible}
+                    onClick={() => onToggleIndicator(indicator.id)}
+                  >
+                    {visible ? (
+                      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+                        <path
+                          d="M10 4c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3C17.5 13.9 14.2 17 10 17S2.5 13.9 1.2 11.1a1.5 1.5 0 0 1 0-1.3C2.5 7.1 5.8 4 10 4Z"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                        />
+                        <circle cx="10" cy="10.5" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+                        <path
+                          d="M3.2 3.2 16.8 16.8"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          d="M6.1 6.1A9.3 9.3 0 0 1 10 5c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3a10.5 10.5 0 0 1-3.2 3.7M8.1 15.2A9.5 9.5 0 0 1 10 16c-4.2 0-7.5-3.1-8.8-5.8a1.5 1.5 0 0 1 0-1.3A10.3 10.3 0 0 1 4 5.9"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
             )
           })}
