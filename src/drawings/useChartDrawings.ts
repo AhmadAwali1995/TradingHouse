@@ -3,6 +3,7 @@ import type { IChartApi, ISeriesApi } from 'lightweight-charts'
 import type { Candle } from '../candles'
 import { anchorPoints, drawingStyle, moveAnchor, translateDrawing } from './edit'
 import { cloneFibSettings } from './fib'
+import { DEFAULT_ACCOUNT_SIZE, DEFAULT_RISK_PERCENT, positionLevels } from './position'
 import { hitTestDrawing, type DrawingHit, type DrawingPrimitive } from './DrawingPrimitive'
 import { coordinateToUnix } from './timeScale'
 import {
@@ -64,6 +65,18 @@ function completeDrawing(tool: DrawingTool, points: ChartPoint[], candles: Candl
       type: 'elliottImpulse',
       ...style,
       points: [points[0], points[1], points[2], points[3], points[4]],
+    }
+  }
+  if ((tool === 'longPosition' || tool === 'shortPosition') && points[0]) {
+    const levels = positionLevels(tool === 'longPosition' ? 'long' : 'short', points[0], candles)
+    return {
+      id,
+      type: tool,
+      ...style,
+      color: '#d1d4dc',
+      ...levels,
+      accountSize: DEFAULT_ACCOUNT_SIZE,
+      riskPercent: DEFAULT_RISK_PERCENT,
     }
   }
   if (tool === 'measure' && points[0] && points[1]) {
@@ -184,12 +197,17 @@ export function useChartDrawings({
       activeTool === 'measure' && previewPoints[0] && hoverPoint
         ? countBars(candlesRef.current, previewPoints[0].time, hoverPoint.time)
         : 0
+    const positionAnchor = previewPoints[0] ?? hoverPoint
+    const position =
+      (activeTool === 'longPosition' || activeTool === 'shortPosition') && positionAnchor
+        ? positionLevels(activeTool === 'longPosition' ? 'long' : 'short', positionAnchor, candlesRef.current)
+        : null
     primitiveRef.current?.setState({
       drawings,
       selectedId,
       hoveredId,
       preview: showPreview
-        ? { tool: activeTool, points: previewPoints, hover: hoverPoint, barCount }
+        ? { tool: activeTool, points: previewPoints, hover: hoverPoint, barCount, position }
         : null,
     })
   }, [drawings, selectedId, hoveredId, tool, draftPoints, hoverPoint, primitiveRef, candlesRef])
@@ -236,8 +254,39 @@ export function useChartDrawings({
     }
 
     let press: { x: number; y: number; point: ChartPoint | null; hit: DrawingHit | null } | null = null
+    let blockPositionMenu = false
+
+    const isPosition = (type: string | undefined) => type === 'longPosition' || type === 'shortPosition'
+
+    const cancelPositionTool = () => {
+      if (!isPosition(toolRef.current ?? undefined)) {
+        return false
+      }
+      setDraftPoints([])
+      setHoverPoint(null)
+      setTool(null)
+      return true
+    }
 
     const onPointerDown = (event: PointerEvent) => {
+      if (event.button === 2) {
+        const local = localPoint(event)
+        const point = toChartPoint(local.x, local.y)
+        const hit = point ? hitAt(local.x, local.y) : null
+        const drawing = hit ? drawingsRef.current.find((item) => item.id === hit.id) : null
+        const holdingPosition =
+          blockPositionMenu ||
+          isPosition(toolRef.current ?? undefined) ||
+          isPosition(dragRef.current?.snapshot.type) ||
+          isPosition(drawing?.type)
+        if (holdingPosition) {
+          blockPositionMenu = true
+          cancelPositionTool()
+          event.preventDefault()
+          event.stopPropagation()
+          return
+        }
+      }
       if (event.button !== 0 || isTypingTarget(event.target)) {
         return
       }
@@ -269,6 +318,9 @@ export function useChartDrawings({
         dropMeasures(null)
       }
       dragRef.current = { hit, origin: point, snapshot, moved: false }
+      if (isPosition(snapshot.type)) {
+        blockPositionMenu = true
+      }
     }
 
     const onPointerMove = (event: PointerEvent) => {
@@ -306,11 +358,17 @@ export function useChartDrawings({
     }
 
     const onPointerUp = (event: PointerEvent) => {
+      if (event.button !== 0) {
+        return
+      }
       const local = localPoint(event)
       const pressPoint = press
       const drag = dragRef.current
       press = null
       dragRef.current = null
+      if ((event.buttons & 1) === 0) {
+        blockPositionMenu = false
+      }
       element.style.cursor = toolRef.current ? 'crosshair' : ''
 
       if (toolRef.current && pressPoint?.point) {
@@ -348,22 +406,29 @@ export function useChartDrawings({
     }
 
     const onContextMenu = (event: MouseEvent) => {
-      if (!toolRef.current && draftRef.current.length === 0) {
+      event.preventDefault()
+      event.stopPropagation()
+      if (blockPositionMenu || isPosition(toolRef.current ?? undefined)) {
+        cancelPositionTool()
+        if ((event.buttons & 1) === 0) {
+          blockPositionMenu = false
+        }
         return
       }
-      event.preventDefault()
-      setDraftPoints([])
+      if (toolRef.current || draftRef.current.length > 0) {
+        setDraftPoints([])
+      }
     }
 
     element.addEventListener('pointerdown', onPointerDown, true)
     element.addEventListener('pointermove', onPointerMove)
     element.addEventListener('pointerup', onPointerUp)
-    element.addEventListener('contextmenu', onContextMenu)
+    element.addEventListener('contextmenu', onContextMenu, true)
     return () => {
       element.removeEventListener('pointerdown', onPointerDown, true)
       element.removeEventListener('pointermove', onPointerMove)
       element.removeEventListener('pointerup', onPointerUp)
-      element.removeEventListener('contextmenu', onContextMenu)
+      element.removeEventListener('contextmenu', onContextMenu, true)
       element.style.cursor = ''
     }
   }, [chartReady, pairId, candlesRef, chartRef, primitiveRef, seriesRef])

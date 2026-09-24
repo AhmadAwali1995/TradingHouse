@@ -12,12 +12,14 @@ import type { CanvasRenderingTarget2D } from 'fancy-canvas'
 import { anchorPoints } from './edit'
 import { cloneFibSettings, fibPrice } from './fib'
 import { distToInfiniteLine, distToSegment, extendThrough, parallelThrough, pointInRect, sameTimeChannel, type XY } from './geometry'
+import { DEFAULT_ACCOUNT_SIZE, DEFAULT_RISK_PERCENT, positionStats, type PositionBar } from './position'
 import { timeToX } from './timeScale'
-import type { ChartPoint, Drawing, DrawingLineStyle, DrawingPreview, FibDrawing } from './types'
+import type { ChartPoint, Drawing, DrawingLineStyle, DrawingPreview, FibDrawing, PositionDrawing } from './types'
 
 type Converter = {
   timeToX: (time: number) => number | null
   priceToY: (price: number) => number | null
+  bars: PositionBar[]
 }
 
 type PrimitiveState = {
@@ -77,6 +79,57 @@ function drawLine(ctx: CanvasRenderingContext2D, a: XY, b: XY) {
   ctx.moveTo(a.x, a.y)
   ctx.lineTo(b.x, b.y)
   ctx.stroke()
+}
+
+function drawPosition(ctx: CanvasRenderingContext2D, drawing: PositionDrawing, convert: Converter, mediaHeight: number) {
+  const left = convert.timeToX(drawing.startTime)
+  const right = convert.timeToX(drawing.endTime)
+  const entryY = convert.priceToY(drawing.entryPrice)
+  const targetY = convert.priceToY(drawing.targetPrice)
+  const stopY = convert.priceToY(drawing.stopPrice)
+  if (left === null || right === null || entryY === null || targetY === null || stopY === null) {
+    return
+  }
+
+  const x = Math.min(left, right)
+  const width = Math.max(Math.abs(right - left), 1)
+  const profitTop = Math.min(entryY, targetY)
+  const profitHeight = Math.abs(targetY - entryY)
+  const stopTop = Math.min(entryY, stopY)
+  const stopHeight = Math.abs(stopY - entryY)
+  const stats = positionStats(drawing, convert.bars)
+  const profitFill = stats.trigger === 'target' ? 'rgba(8, 153, 129, 0.45)' : stats.trigger === 'stop' ? 'rgba(8, 153, 129, 0.08)' : 'rgba(8, 153, 129, 0.22)'
+  const stopFill = stats.trigger === 'stop' ? 'rgba(242, 54, 69, 0.45)' : stats.trigger === 'target' ? 'rgba(242, 54, 69, 0.08)' : 'rgba(242, 54, 69, 0.22)'
+
+  ctx.save()
+  ctx.fillStyle = profitFill
+  ctx.fillRect(x, profitTop, width, profitHeight)
+  ctx.fillStyle = stopFill
+  ctx.fillRect(x, stopTop, width, stopHeight)
+  ctx.lineWidth = 1
+  ctx.setLineDash([])
+  ctx.strokeStyle = '#089981'
+  ctx.strokeRect(x, profitTop, width, profitHeight)
+  ctx.strokeStyle = '#f23645'
+  ctx.strokeRect(x, stopTop, width, stopHeight)
+  ctx.strokeStyle = drawing.color
+  ctx.lineWidth = Math.max(1, drawing.lineWidth)
+  ctx.beginPath()
+  ctx.moveTo(x, entryY)
+  ctx.lineTo(x + width, entryY)
+  ctx.stroke()
+
+  ctx.font = '11px system-ui, "Segoe UI", Roboto, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.fillStyle = '#089981'
+  ctx.textBaseline = 'top'
+  const targetTextY = Math.min(Math.max(profitTop + 4, 4), Math.max(4, entryY - 16))
+  ctx.fillText(stats.targetLabel, x + 6, targetTextY)
+  ctx.fillStyle = '#f23645'
+  ctx.textBaseline = 'bottom'
+  const stopTextY = Math.max(Math.min(stopTop + stopHeight - 4, mediaHeight - 4), entryY + 16)
+  ctx.fillText(stats.stopLabel, x + 6, stopTextY)
+  ctx.restore()
 }
 
 function drawLabel(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: string) {
@@ -199,6 +252,7 @@ function drawOne(
   drawing: Drawing,
   convert: Converter,
   mediaWidth: number,
+  mediaHeight: number,
   emphasize: boolean,
 ) {
   applyLine(ctx, drawing.color, emphasize ? drawing.lineWidth + 1 : drawing.lineWidth, drawing.lineStyle)
@@ -261,6 +315,11 @@ function drawOne(
     return
   }
 
+  if (drawing.type === 'longPosition' || drawing.type === 'shortPosition') {
+    drawPosition(ctx, drawing, convert, mediaHeight)
+    return
+  }
+
   if (drawing.type === 'elliottImpulse') {
     const points = drawing.points.map((point) => toXY(convert, point))
     ctx.beginPath()
@@ -283,10 +342,12 @@ function drawOne(
     return
   }
 
-  const a = toXY(convert, drawing.points[0])
-  const b = toXY(convert, drawing.points[1])
-  if (a && b && drawing.type === 'measure') {
-    drawMeasure(ctx, a, b, drawing.points[0], drawing.points[1], drawing.barCount, drawing.color)
+  if (drawing.type === 'measure') {
+    const a = toXY(convert, drawing.points[0])
+    const b = toXY(convert, drawing.points[1])
+    if (a && b) {
+      drawMeasure(ctx, a, b, drawing.points[0], drawing.points[1], drawing.barCount, drawing.color)
+    }
   }
 }
 
@@ -338,6 +399,18 @@ function previewDrawing(preview: DrawingPreview): Drawing | null {
       settings: cloneFibSettings(),
     }
   }
+  if ((preview.tool === 'longPosition' || preview.tool === 'shortPosition') && preview.position && points[0]) {
+    return {
+      id,
+      type: preview.tool,
+      color: '#d1d4dc',
+      lineWidth,
+      lineStyle: 'solid',
+      ...preview.position,
+      accountSize: DEFAULT_ACCOUNT_SIZE,
+      riskPercent: DEFAULT_RISK_PERCENT,
+    }
+  }
   if (preview.tool === 'measure' && points.length >= 2) {
     return { id, type: 'measure', color, lineWidth, lineStyle, points: [points[0], points[1]], barCount: preview.barCount }
   }
@@ -378,7 +451,7 @@ class DrawingRenderer implements IPrimitivePaneRenderer {
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       for (const drawing of this.state.drawings) {
         const selected = drawing.id === this.state.selectedId
-        drawOne(ctx, drawing, this.convert, mediaSize.width, selected || drawing.id === this.state.hoveredId)
+        drawOne(ctx, drawing, this.convert, mediaSize.width, mediaSize.height, selected || drawing.id === this.state.hoveredId)
         if (selected) {
           const handles = anchorPoints(drawing)
             .map((point) => toXY(this.convert, point))
@@ -392,7 +465,7 @@ class DrawingRenderer implements IPrimitivePaneRenderer {
           ctx.save()
           ctx.setLineDash([6, 4])
           ctx.lineDashOffset = -this.state.dashOffset
-          drawOne(ctx, preview, this.convert, mediaSize.width, false)
+          drawOne(ctx, preview, this.convert, mediaSize.width, mediaSize.height, false)
           ctx.restore()
           const handles = this.state.preview.points
             .map((point) => toXY(this.convert, point))
@@ -515,6 +588,15 @@ export function hitTestDrawing(
         }
       }
     }
+    if (drawing.type === 'longPosition' || drawing.type === 'shortPosition') {
+      const left = convert.timeToX(drawing.startTime)
+      const right = convert.timeToX(drawing.endTime)
+      const top = convert.priceToY(Math.max(drawing.targetPrice, drawing.stopPrice, drawing.entryPrice))
+      const bottom = convert.priceToY(Math.min(drawing.targetPrice, drawing.stopPrice, drawing.entryPrice))
+      if (left !== null && right !== null && top !== null && bottom !== null && pointInRect(x, y, left, top, right, bottom)) {
+        return { id: drawing.id, kind: 'body' }
+      }
+    }
     if (drawing.type === 'measure') {
       const a = toXY(convert, drawing.points[0])
       const b = toXY(convert, drawing.points[1])
@@ -595,9 +677,24 @@ export class DrawingPrimitive implements ISeriesPrimitive {
     if (!chart || !series) {
       return null
     }
+    const bars: PositionBar[] = []
+    for (const row of series.data()) {
+      if (
+        typeof row.time === 'number' &&
+        'open' in row &&
+        'high' in row &&
+        'low' in row &&
+        typeof row.open === 'number' &&
+        typeof row.high === 'number' &&
+        typeof row.low === 'number'
+      ) {
+        bars.push({ time: row.time, open: row.open, high: row.high, low: row.low })
+      }
+    }
     return {
       timeToX: (time) => timeToX(chart, series, time),
       priceToY: (price) => series.priceToCoordinate(price),
+      bars,
     }
   }
 

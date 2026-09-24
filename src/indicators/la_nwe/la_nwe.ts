@@ -1,8 +1,8 @@
 import type { Candle } from '../../candles'
 
 export const LA_NWE_LOOKBACK = 500
-export const LA_NWE_BANDWIDTH = 8
-export const LA_NWE_MULTIPLIER = 3
+export const LA_NWE_BANDWIDTH = 7
+export const LA_NWE_MULTIPLIER = 2
 
 export type LaNweSettings = {
   bandwidth: number

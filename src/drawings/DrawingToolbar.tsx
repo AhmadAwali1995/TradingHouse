@@ -12,6 +12,13 @@ const LINE_TOOLS: { id: DrawingTool; label: string }[] = [
 
 const LINE_IDS = new Set(LINE_TOOLS.map((item) => item.id))
 
+const FORECAST_TOOLS: { id: DrawingTool; label: string }[] = [
+  { id: 'longPosition', label: 'Long position' },
+  { id: 'shortPosition', label: 'Short position' },
+]
+
+const FORECAST_IDS = new Set(FORECAST_TOOLS.map((item) => item.id))
+
 function Handle({ x, y }: { x: number; y: number }) {
   return <rect x={x - 2.2} y={y - 2.2} width="4.4" height="4.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
 }
@@ -70,6 +77,26 @@ function ToolIcon({ id }: { id: DrawingTool }) {
     )
   }
 
+  if (id === 'longPosition' || id === 'shortPosition') {
+    const up = id === 'longPosition'
+    return (
+      <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true">
+        <line x1="8" y1="6" x2="22" y2="6" stroke={up ? '#089981' : '#f23645'} strokeWidth="1.3" />
+        <line x1="6" y1="14" x2="22" y2="14" stroke="currentColor" strokeWidth="1.4" />
+        <line x1="8" y1="22" x2="22" y2="22" stroke={up ? '#f23645' : '#089981'} strokeWidth="1.3" />
+        <line x1="8" y1="6" x2="8" y2="22" stroke="currentColor" strokeWidth="1.3" />
+        <path
+          d={up ? 'M14 11.5 V7.5 M12.2 9.2 L14 7.2 L15.8 9.2' : 'M14 16.5 V20.5 M12.2 18.8 L14 20.8 L15.8 18.8'}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    )
+  }
+
   if (id === 'fibRetracement') {
     return (
       <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true">
@@ -115,33 +142,41 @@ export function DrawingToolbar({
   onClear: () => void
 }) {
   const rootRef = useRef<HTMLElement>(null)
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [menu, setMenu] = useState<null | 'line' | 'forecast'>(null)
   const [lineTool, setLineTool] = useState<DrawingTool>('trendline')
+  const [forecastTool, setForecastTool] = useState<DrawingTool>('longPosition')
   const shownLine =
     LINE_TOOLS.find((item) => item.id === (tool !== null && LINE_IDS.has(tool) ? tool : lineTool)) ?? LINE_TOOLS[0]
+  const shownForecast =
+    FORECAST_TOOLS.find((item) => item.id === (tool !== null && FORECAST_IDS.has(tool) ? tool : forecastTool)) ??
+    FORECAST_TOOLS[0]
   const lineActive = tool !== null && LINE_IDS.has(tool)
+  const forecastActive = tool !== null && FORECAST_IDS.has(tool)
 
   const selectTool = (id: DrawingTool) => {
     if (LINE_IDS.has(id)) {
       setLineTool(id)
     }
+    if (FORECAST_IDS.has(id)) {
+      setForecastTool(id)
+    }
     onSelectTool(tool === id ? null : id)
-    setMenuOpen(false)
+    setMenu(null)
   }
 
   useEffect(() => {
-    if (!menuOpen) {
+    if (!menu) {
       return
     }
 
     const onPointerDown = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) {
-        setMenuOpen(false)
+        setMenu(null)
       }
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setMenuOpen(false)
+        setMenu(null)
       }
     }
 
@@ -151,7 +186,7 @@ export function DrawingToolbar({
       document.removeEventListener('mousedown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [menuOpen])
+  }, [menu])
 
   return (
     <aside className="drawing-toolbar" aria-label="Drawing tools" ref={rootRef}>
@@ -171,15 +206,15 @@ export function DrawingToolbar({
             type="button"
             className="drawing-toolbar__chevron"
             aria-label="Line tools"
-            aria-expanded={menuOpen}
+            aria-expanded={menu === 'line'}
             title="Line tools"
-            onClick={() => setMenuOpen((open) => !open)}
+            onClick={() => setMenu((open) => (open === 'line' ? null : 'line'))}
           >
             <svg viewBox="0 0 8 5" width="8" height="5" aria-hidden="true">
               <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
             </svg>
           </button>
-          {menuOpen ? (
+          {menu === 'line' ? (
             <div className="drawing-toolbar__menu" role="menu" aria-label="Line tools">
               {LINE_TOOLS.map((item) => (
                 <button
@@ -219,6 +254,48 @@ export function DrawingToolbar({
         >
           <ToolIcon id="elliottImpulse" />
         </button>
+
+        <div className={forecastActive ? 'drawing-toolbar__split is-active' : 'drawing-toolbar__split'}>
+          <button
+            type="button"
+            className="drawing-toolbar__button"
+            aria-label={shownForecast.label}
+            title={shownForecast.label}
+            aria-pressed={forecastActive}
+            onClick={() => selectTool(shownForecast.id)}
+          >
+            <ToolIcon id={shownForecast.id} />
+          </button>
+          <button
+            type="button"
+            className="drawing-toolbar__chevron"
+            aria-label="Long and short position"
+            aria-expanded={menu === 'forecast'}
+            title="Long and short position"
+            onClick={() => setMenu((open) => (open === 'forecast' ? null : 'forecast'))}
+          >
+            <svg viewBox="0 0 8 5" width="8" height="5" aria-hidden="true">
+              <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
+            </svg>
+          </button>
+          {menu === 'forecast' ? (
+            <div className="drawing-toolbar__menu" role="menu" aria-label="Long and short position">
+              {FORECAST_TOOLS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={tool === item.id}
+                  className={tool === item.id ? 'drawing-toolbar__menu-item is-active' : 'drawing-toolbar__menu-item'}
+                  onClick={() => selectTool(item.id)}
+                >
+                  <ToolIcon id={item.id} />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="drawing-toolbar__separator" />

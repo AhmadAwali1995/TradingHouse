@@ -22,6 +22,19 @@ export function anchorPoints(drawing: Drawing): ChartPoint[] {
     const [lineStart] = sameTimeChannel(start, end, widthPoint)
     return [start, end, lineStart]
   }
+  if (drawing.type === 'longPosition' || drawing.type === 'shortPosition') {
+    const mid = (drawing.startTime + drawing.endTime) / 2
+    return [
+      { time: drawing.startTime, price: drawing.entryPrice },
+      { time: drawing.endTime, price: drawing.entryPrice },
+      { time: mid, price: drawing.targetPrice },
+      { time: mid, price: drawing.stopPrice },
+      { time: mid, price: drawing.entryPrice },
+    ]
+  }
+  if (!('points' in drawing)) {
+    return []
+  }
   return [...drawing.points]
 }
 
@@ -63,7 +76,47 @@ export function translateDrawing(drawing: Drawing, dTime: number, dPrice: number
           shiftPoint(drawing.points[4], dTime, dPrice),
         ],
       }
+    case 'longPosition':
+    case 'shortPosition':
+      return {
+        ...drawing,
+        startTime: drawing.startTime + dTime,
+        endTime: drawing.endTime + dTime,
+        entryPrice: drawing.entryPrice + dPrice,
+        targetPrice: drawing.targetPrice + dPrice,
+        stopPrice: drawing.stopPrice + dPrice,
+      }
   }
+}
+
+function setPositionEdge(drawing: Extract<Drawing, { type: 'longPosition' | 'shortPosition' }>, edge: 'start' | 'end', time: number): Drawing {
+  if (edge === 'start') {
+    if (time < drawing.endTime) {
+      return { ...drawing, startTime: time }
+    }
+    return { ...drawing, startTime: drawing.endTime, endTime: time }
+  }
+  if (time > drawing.startTime) {
+    return { ...drawing, endTime: time }
+  }
+  return { ...drawing, endTime: drawing.startTime, startTime: time }
+}
+
+function setPositionPrice(
+  drawing: Extract<Drawing, { type: 'longPosition' | 'shortPosition' }>,
+  field: 'target' | 'stop' | 'entry',
+  price: number,
+): Drawing {
+  const long = drawing.type === 'longPosition'
+  if (field === 'entry') {
+    const upper = long ? drawing.targetPrice : drawing.stopPrice
+    const lower = long ? drawing.stopPrice : drawing.targetPrice
+    return { ...drawing, entryPrice: Math.min(upper, Math.max(lower, price)) }
+  }
+  if (field === 'target') {
+    return { ...drawing, targetPrice: long ? Math.max(price, drawing.entryPrice) : Math.min(price, drawing.entryPrice) }
+  }
+  return { ...drawing, stopPrice: long ? Math.min(price, drawing.entryPrice) : Math.max(price, drawing.entryPrice) }
 }
 
 export function moveAnchor(drawing: Drawing, index: number, point: ChartPoint): Drawing {
@@ -95,6 +148,25 @@ export function moveAnchor(drawing: Drawing, index: number, point: ChartPoint): 
         points[index] = point
       }
       return { ...drawing, points }
+    }
+    case 'longPosition':
+    case 'shortPosition': {
+      if (index === 0) {
+        return setPositionEdge(drawing, 'start', point.time)
+      }
+      if (index === 1) {
+        return setPositionEdge(drawing, 'end', point.time)
+      }
+      if (index === 2) {
+        return setPositionPrice(drawing, 'target', point.price)
+      }
+      if (index === 3) {
+        return setPositionPrice(drawing, 'stop', point.price)
+      }
+      if (index === 4) {
+        return setPositionPrice(drawing, 'entry', point.price)
+      }
+      return drawing
     }
   }
 }

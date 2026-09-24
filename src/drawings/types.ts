@@ -6,6 +6,8 @@ export type DrawingTool =
   | 'parallelChannel'
   | 'fibRetracement'
   | 'elliottImpulse'
+  | 'longPosition'
+  | 'shortPosition'
   | 'measure'
 
 export type ChartPoint = {
@@ -75,6 +77,17 @@ export type MeasureDrawing = DrawingBase & {
   barCount: number
 }
 
+export type PositionDrawing = DrawingBase & {
+  type: 'longPosition' | 'shortPosition'
+  startTime: number
+  endTime: number
+  entryPrice: number
+  targetPrice: number
+  stopPrice: number
+  accountSize: number
+  riskPercent: number
+}
+
 export type Drawing =
   | TrendlineDrawing
   | ChannelDrawing
@@ -82,6 +95,7 @@ export type Drawing =
   | HorizontalRayDrawing
   | FibDrawing
   | ElliottDrawing
+  | PositionDrawing
   | MeasureDrawing
 
 export type DrawingPreview = {
@@ -89,6 +103,13 @@ export type DrawingPreview = {
   points: ChartPoint[]
   hover: ChartPoint | null
   barCount: number
+  position: {
+    startTime: number
+    endTime: number
+    entryPrice: number
+    targetPrice: number
+    stopPrice: number
+  } | null
 }
 
 export const TOOL_POINTS: Record<DrawingTool, number> = {
@@ -99,6 +120,8 @@ export const TOOL_POINTS: Record<DrawingTool, number> = {
   parallelChannel: 3,
   fibRetracement: 2,
   elliottImpulse: 5,
+  longPosition: 1,
+  shortPosition: 1,
   measure: 2,
 }
 
