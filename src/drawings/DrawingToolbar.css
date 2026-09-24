@@ -15,6 +15,10 @@
   flex-direction: column;
 }
 
+.drawing-toolbar__spacer {
+  flex: 1;
+}
+
 .drawing-toolbar__separator {
   height: 1px;
   margin: 6px 8px;

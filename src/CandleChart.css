@@ -340,6 +340,23 @@
   width: auto;
 }
 
+.candle-chart__fib-level {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.candle-chart__fib-level input[type='text'] {
+  width: 100%;
+}
+
+.candle-chart__fib-level input[type='color'] {
+  width: 28px;
+  height: 22px;
+  padding: 2px;
+}
+
 .candle-chart__settings-actions {
   display: flex;
   justify-content: flex-end;

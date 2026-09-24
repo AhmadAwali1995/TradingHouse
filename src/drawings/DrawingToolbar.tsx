@@ -108,9 +108,11 @@ function ToolIcon({ id }: { id: DrawingTool }) {
 export function DrawingToolbar({
   tool,
   onSelectTool,
+  onClear,
 }: {
   tool: DrawingTool | null
   onSelectTool: (tool: DrawingTool | null) => void
+  onClear: () => void
 }) {
   const rootRef = useRef<HTMLElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -233,6 +235,23 @@ export function DrawingToolbar({
           <ToolIcon id="measure" />
         </button>
       </div>
+
+      <div className="drawing-toolbar__spacer" />
+
+      <button
+        type="button"
+        className="drawing-toolbar__button"
+        aria-label="Remove all drawings"
+        title="Remove all drawings"
+        onClick={onClear}
+      >
+        <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true">
+          <path d="M9 8.5h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <path d="M12 8.5V7h4v1.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+          <path d="M10.2 11.2h7.6l-.6 10.2h-6.4z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+          <path d="M13 13.2v5.4M15 13.2v5.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      </button>
     </aside>
   )
 }

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { FibSettings } from './types'
 
 export function FibSettingsPanel({
@@ -9,6 +10,15 @@ export function FibSettingsPanel({
   onChange: (settings: FibSettings) => void
   onClose: () => void
 }) {
+  const [drafts, setDrafts] = useState<Record<number, string>>({})
+
+  const setLevelValue = (index: number, value: number) => {
+    const levels = settings.levels.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, value } : item,
+    )
+    onChange({ ...settings, levels })
+  }
+
   return (
     <div className="candle-chart__settings candle-chart__settings--tv-macd">
       <p className="candle-chart__settings-title">Fib retracement</p>
@@ -57,20 +67,38 @@ export function FibSettingsPanel({
       <p className="candle-chart__settings-title">Levels</p>
       <div className="candle-chart__settings-grid">
         {settings.levels.map((level, index) => (
-          <label key={level.value} className="candle-chart__settings-check">
-            <span>
-              <input
-                type="checkbox"
-                checked={level.visible}
-                onChange={(event) => {
-                  const levels = settings.levels.map((item, itemIndex) =>
-                    itemIndex === index ? { ...item, visible: event.target.checked } : item,
-                  )
-                  onChange({ ...settings, levels })
-                }}
-              />{' '}
-              {level.value}
-            </span>
+          <label key={index} className="candle-chart__settings-check candle-chart__fib-level">
+            <input
+              type="checkbox"
+              checked={level.visible}
+              aria-label={`Show ${level.value}`}
+              onChange={(event) => {
+                const levels = settings.levels.map((item, itemIndex) =>
+                  itemIndex === index ? { ...item, visible: event.target.checked } : item,
+                )
+                onChange({ ...settings, levels })
+              }}
+            />
+            <input
+              type="text"
+              inputMode="decimal"
+              value={drafts[index] ?? String(level.value)}
+              aria-label={`Level ${index + 1}`}
+              onFocus={() => setDrafts((current) => ({ ...current, [index]: String(level.value) }))}
+              onChange={(event) => {
+                const text = event.target.value
+                setDrafts((current) => ({ ...current, [index]: text }))
+                const value = Number(text)
+                if (text.trim() !== '' && Number.isFinite(value)) setLevelValue(index, value)
+              }}
+              onBlur={() => {
+                setDrafts((current) => {
+                  const next = { ...current }
+                  delete next[index]
+                  return next
+                })
+              }}
+            />
             <input
               type="color"
               value={level.color}

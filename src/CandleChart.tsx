@@ -1065,6 +1065,7 @@ export function CandleChart({
     updateSelectedFib,
     updateSelectedStyle,
     deleteSelected,
+    clearDrawings,
   } = useChartDrawings({
     chartReady,
     pairId: pair.id,
@@ -2095,7 +2096,7 @@ export function CandleChart({
       </div>
       {error ? <p className="candle-chart__error">{error}</p> : null}
       <div className="candle-chart__body">
-        <DrawingToolbar tool={drawingTool} onSelectTool={setDrawingTool} />
+        <DrawingToolbar tool={drawingTool} onSelectTool={setDrawingTool} onClear={clearDrawings} />
       <div className="candle-chart__viewport">
         <div className="candle-chart__canvas" ref={containerRef} />
         {selected && stylePosition ? (

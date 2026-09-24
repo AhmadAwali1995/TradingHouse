@@ -101,14 +101,14 @@ function fibLevelYs(drawing: FibDrawing, convert: Converter): { y: number; level
   return rows.sort((a, b) => a.y - b.y)
 }
 
-function drawFib(ctx: CanvasRenderingContext2D, drawing: FibDrawing, convert: Converter, mediaWidth: number) {
+function drawFib(ctx: CanvasRenderingContext2D, drawing: FibDrawing, convert: Converter) {
   const a = toXY(convert, drawing.points[0])
   const b = toXY(convert, drawing.points[1])
   if (!a || !b) {
     return
   }
-  const left = drawing.settings.extendLeft ? 0 : Math.min(a.x, b.x)
-  const right = drawing.settings.extendRight ? mediaWidth : Math.max(a.x, b.x)
+  const left = Math.min(a.x, b.x)
+  const right = Math.max(a.x, b.x)
   const rows = fibLevelYs(drawing, convert)
   if (drawing.settings.fill) {
     for (let i = 0; i < rows.length - 1; i += 1) {
@@ -257,7 +257,7 @@ function drawOne(
   }
 
   if (drawing.type === 'fibRetracement') {
-    drawFib(ctx, drawing, convert, mediaWidth)
+    drawFib(ctx, drawing, convert)
     return
   }
 

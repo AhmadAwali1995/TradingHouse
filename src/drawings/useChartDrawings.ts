@@ -140,6 +140,14 @@ export function useChartDrawings({
     setSelectedId(null)
   }
 
+  const clearDrawings = () => {
+    setPairDrawings(() => [])
+    setSelectedId(null)
+    setHoveredId(null)
+    setDraftPoints([])
+    setHoverPoint(null)
+  }
+
   const updateSelectedFib = (settings: FibSettings) => {
     setPairDrawings((current) =>
       current.map((drawing) =>
@@ -420,5 +428,6 @@ export function useChartDrawings({
     updateSelectedFib,
     updateSelectedStyle,
     deleteSelected,
+    clearDrawings,
   }
 }

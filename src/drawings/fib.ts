@@ -3,7 +3,7 @@ import type { FibSettings } from './types'
 export const DEFAULT_FIB_SETTINGS: FibSettings = {
   reverse: false,
   extendLeft: false,
-  extendRight: true,
+  extendRight: false,
   showLabels: true,
   fill: true,
   levels: [
