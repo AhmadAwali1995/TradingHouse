@@ -34,7 +34,6 @@ function App() {
     <div className="app">
       <header className="topbar" />
       <main className="workspace">
-        <aside className="sidebar" />
         <section className="chart">
           <CandleChart
             pair={pair}

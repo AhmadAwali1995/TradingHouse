@@ -106,6 +106,12 @@
   min-height: 0;
 }
 
+.candle-chart__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
 .candle-chart__viewport {
   position: relative;
   flex: 1;

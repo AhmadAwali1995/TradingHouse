@@ -19,22 +19,13 @@
   min-height: 0;
 }
 
-.sidebar,
-.watchlist {
-  width: 48px;
-  flex-shrink: 0;
-  background: #1e222d;
-}
-
-.sidebar {
-  border-right: 1px solid #2a2e39;
-}
-
 .watchlist {
   display: flex;
   flex-direction: column;
   width: 320px;
+  flex-shrink: 0;
   min-height: 0;
+  background: #1e222d;
   border-left: 1px solid #2a2e39;
 }
 

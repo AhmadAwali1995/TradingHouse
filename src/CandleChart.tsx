@@ -58,6 +58,11 @@ import {
 } from './indicators'
 import type { IndicatorId, IndicatorVisibility } from './indicatorCatalog'
 import { subscribeLiveCandles } from './klineSocket'
+import { DrawingPrimitive } from './drawings/DrawingPrimitive'
+import { DrawingToolbar } from './drawings/DrawingToolbar'
+import { DrawingStyleBar } from './drawings/DrawingStyleBar'
+import { FibSettingsPanel } from './drawings/FibSettingsPanel'
+import { useChartDrawings } from './drawings/useChartDrawings'
 import { LastPriceCountdownPrimitive } from './lastPriceCountdown'
 import { formatLastPrice } from './tickers'
 import { LaNweSignalMarkersPrimitive } from './la_nweSignalMarkers'
@@ -1013,6 +1018,7 @@ export function CandleChart({
   const smaBbUpperRef = useRef<ISeriesApi<'Line'> | null>(null)
   const smaBbLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
   const la_nweMarkersRef = useRef<LaNweSignalMarkersPrimitive | null>(null)
+  const drawingPrimitiveRef = useRef<DrawingPrimitive | null>(null)
   const candlesRef = useRef<Candle[]>([])
   const countdownRef = useRef<LastPriceCountdownPrimitive | null>(null)
   const initialRangeRef = useRef<LogicalRange | null>(null)
@@ -1048,6 +1054,25 @@ export function CandleChart({
   tvMacdSettingsRef.current = tvMacdSettings
   smaSettingsRef.current = smaSettings
   timeframeRef.current = timeframe
+
+  const {
+    tool: drawingTool,
+    setTool: setDrawingTool,
+    setSelectedId,
+    selected,
+    selectedFib,
+    stylePosition,
+    updateSelectedFib,
+    updateSelectedStyle,
+    deleteSelected,
+  } = useChartDrawings({
+    chartReady,
+    pairId: pair.id,
+    chartRef,
+    seriesRef,
+    candlesRef,
+    primitiveRef: drawingPrimitiveRef,
+  })
 
   const getRsiPane = (): RsiPaneSeries | null => {
     const series = rsiSeriesRef.current
@@ -1198,9 +1223,12 @@ export function CandleChart({
     series.attachPrimitive(countdown)
     const la_nweMarkers = new LaNweSignalMarkersPrimitive()
     series.attachPrimitive(la_nweMarkers)
+    const drawings = new DrawingPrimitive()
+    series.attachPrimitive(drawings)
     seriesRef.current = series
     countdownRef.current = countdown
     la_nweMarkersRef.current = la_nweMarkers
+    drawingPrimitiveRef.current = drawings
 
     const la_nweUpper = chart.addSeries(LineSeries, {
       color: '#00897b',
@@ -1280,6 +1308,7 @@ export function CandleChart({
       smaSmoothingRef.current = null
       smaBbUpperRef.current = null
       smaBbLowerRef.current = null
+      drawingPrimitiveRef.current = null
       la_nweMarkersRef.current = null
       countdownRef.current = null
       chartRef.current = null
@@ -2065,8 +2094,18 @@ export function CandleChart({
         </div>
       </div>
       {error ? <p className="candle-chart__error">{error}</p> : null}
+      <div className="candle-chart__body">
+        <DrawingToolbar tool={drawingTool} onSelectTool={setDrawingTool} />
       <div className="candle-chart__viewport">
         <div className="candle-chart__canvas" ref={containerRef} />
+        {selected && stylePosition ? (
+          <DrawingStyleBar
+            drawing={selected}
+            position={stylePosition}
+            onChange={updateSelectedStyle}
+            onDelete={deleteSelected}
+          />
+        ) : null}
         {loading ? (
           <div className="candle-chart__loading" role="status" aria-live="polite" aria-label="Loading chart data">
             <span className="candle-chart__loading-spinner" aria-hidden="true" />
@@ -2762,6 +2801,13 @@ export function CandleChart({
             </div>
           </div>
         ) : null}
+        {selectedFib ? (
+          <FibSettingsPanel
+            settings={selectedFib.settings}
+            onChange={updateSelectedFib}
+            onClose={() => setSelectedId(null)}
+          />
+        ) : null}
         <div className="candle-chart__controls" aria-label="Chart controls">
           <button type="button" className="candle-chart__control" onClick={() => zoomRange(1.25)}>
             -
@@ -2785,6 +2831,7 @@ export function CandleChart({
             ↻
           </button>
         </div>
+      </div>
       </div>
     </div>
   )

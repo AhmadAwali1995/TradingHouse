@@ -1,0 +1,60 @@
+.drawing-style {
+  position: absolute;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid #363a45;
+  border-radius: 6px;
+  background: #1e222d;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  color: #d1d4dc;
+}
+
+.drawing-style select,
+.drawing-style button {
+  height: 26px;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  background: #131722;
+  color: #d1d4dc;
+  font: inherit;
+  font-size: 12px;
+}
+
+.drawing-style button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.drawing-style button:hover {
+  color: #f23645;
+}
+
+.drawing-style__color {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+}
+
+.drawing-style__color input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.drawing-style__swatch {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border: 1px solid #363a45;
+  border-radius: 4px;
+}
