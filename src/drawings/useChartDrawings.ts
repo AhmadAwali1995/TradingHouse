@@ -4,6 +4,7 @@ import type { Candle } from '../candles'
 import { anchorPoints, drawingStyle, moveAnchor, translateDrawing } from './edit'
 import { cloneFibSettings } from './fib'
 import { hitTestDrawing, type DrawingHit, type DrawingPrimitive } from './DrawingPrimitive'
+import { coordinateToUnix } from './timeScale'
 import {
   TOOL_POINTS,
   type ChartPoint,
@@ -210,9 +211,9 @@ export function useChartDrawings({
       if (!inMainPane(x, y)) {
         return null
       }
-      const time = chart.timeScale().coordinateToTime(x)
+      const time = coordinateToUnix(chart, series, x)
       const price = series.coordinateToPrice(y)
-      if (typeof time !== 'number' || price === null) {
+      if (time === null || price === null) {
         return null
       }
       return { time, price }

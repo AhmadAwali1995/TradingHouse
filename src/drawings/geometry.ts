@@ -41,6 +41,21 @@ export function extendThrough(a: XY, b: XY, scale = 8000): [XY, XY] {
   ]
 }
 
+export function channelPriceOffset(a: ChartPoint, b: ChartPoint, c: ChartPoint): number {
+  const span = b.time - a.time
+  const ratio = span === 0 ? 0 : (c.time - a.time) / span
+  const priceOnLine = a.price + (b.price - a.price) * ratio
+  return c.price - priceOnLine
+}
+
+export function sameTimeChannel(a: ChartPoint, b: ChartPoint, c: ChartPoint): [ChartPoint, ChartPoint] {
+  const offset = channelPriceOffset(a, b, c)
+  return [
+    { time: a.time, price: a.price + offset },
+    { time: b.time, price: b.price + offset },
+  ]
+}
+
 export function parallelThrough(a: XY, b: XY, c: XY): [XY, XY] {
   return [
     { x: c.x, y: c.y },

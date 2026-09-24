@@ -1,3 +1,4 @@
+import { sameTimeChannel } from './geometry'
 import type { ChartPoint, Drawing, DrawingBase } from './types'
 import { DEFAULT_LINE_STYLE, DEFAULT_LINE_WIDTH, DRAWING_COLOR } from './types'
 
@@ -15,6 +16,11 @@ export function anchorPoints(drawing: Drawing): ChartPoint[] {
   }
   if (drawing.type === 'horizontalRay') {
     return [drawing.point]
+  }
+  if (drawing.type === 'channel') {
+    const [start, end, widthPoint] = drawing.points
+    const [lineStart] = sameTimeChannel(start, end, widthPoint)
+    return [start, end, lineStart]
   }
   return [...drawing.points]
 }

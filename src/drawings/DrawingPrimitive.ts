@@ -1,4 +1,5 @@
 import type {
+  IChartApiBase,
   IPrimitivePaneRenderer,
   IPrimitivePaneView,
   ISeriesApi,
@@ -10,7 +11,8 @@ import type {
 import type { CanvasRenderingTarget2D } from 'fancy-canvas'
 import { anchorPoints } from './edit'
 import { cloneFibSettings, fibPrice } from './fib'
-import { distToInfiniteLine, distToSegment, extendThrough, parallelThrough, pointInRect, type XY } from './geometry'
+import { distToInfiniteLine, distToSegment, extendThrough, parallelThrough, pointInRect, sameTimeChannel, type XY } from './geometry'
+import { timeToX } from './timeScale'
 import type { ChartPoint, Drawing, DrawingLineStyle, DrawingPreview, FibDrawing } from './types'
 
 type Converter = {
@@ -128,6 +130,20 @@ function drawFib(ctx: CanvasRenderingContext2D, drawing: FibDrawing, convert: Co
   }
 }
 
+function drawChannelEnds(ctx: CanvasRenderingContext2D, p1: XY, p2: XY, q1: XY, q2: XY, drawing: Drawing) {
+  ctx.fillStyle = `${drawing.color}22`
+  ctx.beginPath()
+  ctx.moveTo(p1.x, p1.y)
+  ctx.lineTo(p2.x, p2.y)
+  ctx.lineTo(q2.x, q2.y)
+  ctx.lineTo(q1.x, q1.y)
+  ctx.closePath()
+  ctx.fill()
+  applyLine(ctx, drawing.color, drawing.lineWidth, drawing.lineStyle)
+  drawLine(ctx, p1, p2)
+  drawLine(ctx, q1, q2)
+}
+
 function drawChannel(
   ctx: CanvasRenderingContext2D,
   a: XY,
@@ -196,12 +212,24 @@ function drawOne(
     return
   }
 
-  if (drawing.type === 'channel' || drawing.type === 'parallelChannel') {
+  if (drawing.type === 'channel') {
+    const [lineStart, lineEnd] = sameTimeChannel(drawing.points[0], drawing.points[1], drawing.points[2])
+    const p1 = toXY(convert, drawing.points[0])
+    const p2 = toXY(convert, drawing.points[1])
+    const q1 = toXY(convert, lineStart)
+    const q2 = toXY(convert, lineEnd)
+    if (p1 && p2 && q1 && q2) {
+      drawChannelEnds(ctx, p1, p2, q1, q2, drawing)
+    }
+    return
+  }
+
+  if (drawing.type === 'parallelChannel') {
     const a = toXY(convert, drawing.points[0])
     const b = toXY(convert, drawing.points[1])
     const c = toXY(convert, drawing.points[2])
     if (a && b && c) {
-      drawChannel(ctx, a, b, c, drawing, drawing.type === 'parallelChannel')
+      drawChannel(ctx, a, b, c, drawing, true)
     }
     return
   }
@@ -423,7 +451,23 @@ export function hitTestDrawing(
         return { id: drawing.id, kind: 'body' }
       }
     }
-    if (drawing.type === 'channel' || drawing.type === 'parallelChannel') {
+    if (drawing.type === 'channel') {
+      const [lineStart, lineEnd] = sameTimeChannel(drawing.points[0], drawing.points[1], drawing.points[2])
+      const a = toXY(convert, drawing.points[0])
+      const b = toXY(convert, drawing.points[1])
+      const q1 = toXY(convert, lineStart)
+      const q2 = toXY(convert, lineEnd)
+      if (
+        a &&
+        b &&
+        q1 &&
+        q2 &&
+        (distToSegment(x, y, a.x, a.y, b.x, b.y) <= HIT_PX || distToSegment(x, y, q1.x, q1.y, q2.x, q2.y) <= HIT_PX)
+      ) {
+        return { id: drawing.id, kind: 'body' }
+      }
+    }
+    if (drawing.type === 'parallelChannel') {
       const a = toXY(convert, drawing.points[0])
       const b = toXY(convert, drawing.points[1])
       const c = toXY(convert, drawing.points[2])
@@ -483,8 +527,8 @@ export function hitTestDrawing(
 }
 
 export class DrawingPrimitive implements ISeriesPrimitive {
-  private series: ISeriesApi<SeriesType> | null = null
-  private timeToCoordinate: ((time: Time) => number | null) | null = null
+  private chart: IChartApiBase<Time> | null = null
+  private series: ISeriesApi<SeriesType, Time> | null = null
   private requestUpdate: (() => void) | null = null
   private dashTimer: number | null = null
   private readonly state: PrimitiveState = {
@@ -496,15 +540,15 @@ export class DrawingPrimitive implements ISeriesPrimitive {
   }
 
   attached(param: SeriesAttachedParameter<Time, SeriesType>) {
+    this.chart = param.chart
     this.series = param.series
     this.requestUpdate = param.requestUpdate
-    this.timeToCoordinate = (time) => param.chart.timeScale().timeToCoordinate(time)
   }
 
   detached() {
     this.stopDash()
+    this.chart = null
     this.series = null
-    this.timeToCoordinate = null
     this.requestUpdate = null
   }
 
@@ -546,13 +590,13 @@ export class DrawingPrimitive implements ISeriesPrimitive {
   }
 
   converter(): Converter | null {
+    const chart = this.chart
     const series = this.series
-    const timeToCoordinate = this.timeToCoordinate
-    if (!series || !timeToCoordinate) {
+    if (!chart || !series) {
       return null
     }
     return {
-      timeToX: (time) => timeToCoordinate(time as Time),
+      timeToX: (time) => timeToX(chart, series, time),
       priceToY: (price) => series.priceToCoordinate(price),
     }
   }
