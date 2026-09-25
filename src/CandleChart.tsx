@@ -981,6 +981,7 @@ export function CandleChart({
   indicatorVisibility,
   strategyVisibility,
   rewardRatio,
+  onRewardRatioChange,
   backtestOpen,
   onBacktestClose,
   settingsOpen,
@@ -993,6 +994,7 @@ export function CandleChart({
   indicatorVisibility: IndicatorVisibility
   strategyVisibility: StrategyVisibility
   rewardRatio: RewardRatio
+  onRewardRatioChange: (ratio: RewardRatio) => void
   backtestOpen: boolean
   onBacktestClose: () => void
   settingsOpen: IndicatorId | null
@@ -2919,8 +2921,12 @@ export function CandleChart({
         ) : null}
         {backtestOpen ? (
           <BacktestModal
+            rewardRatio={rewardRatio}
+            onRewardRatioChange={onRewardRatioChange}
+            firstTime={candlesRef.current[0]?.time ?? null}
+            lastTime={candlesRef.current.at(-1)?.time ?? null}
             onClose={onBacktestClose}
-            onRun={(from, to, amount) => {
+            onRun={(from, to, amount, ratio) => {
               const candles = candlesRef.current
               if (candles.length === 0) {
                 throw new Error('Chart data is not loaded yet.')
@@ -2928,7 +2934,7 @@ export function CandleChart({
               return runLuxAlgoBacktest({
                 candles,
                 laNweSettings: la_nweSettings,
-                rewardRatio,
+                rewardRatio: ratio,
                 from,
                 to,
                 amount,

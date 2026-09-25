@@ -137,14 +137,9 @@
   color: #d1d4dc;
 }
 
-.tv-watchlist__backtest-row {
-  display: flex;
-  justify-content: flex-end;
-  padding: 8px 12px 0;
-}
-
 .tv-watchlist__backtest {
   height: 24px;
+  margin-right: 4px;
   padding: 0 10px;
   border: 1px solid #2a2e39;
   border-radius: 4px;

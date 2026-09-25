@@ -8,8 +8,43 @@
   background: rgba(0, 0, 0, 0.45);
 }
 
+.backtest__dialog,
+.backtest__trades {
+  scrollbar-width: thin;
+  scrollbar-color: #434651 transparent;
+}
+
+.backtest__dialog::-webkit-scrollbar,
+.backtest__trades::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.backtest__dialog::-webkit-scrollbar-track,
+.backtest__trades::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.backtest__dialog::-webkit-scrollbar-thumb,
+.backtest__trades::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #434651;
+  background-clip: padding-box;
+}
+
+.backtest__dialog::-webkit-scrollbar-thumb:hover,
+.backtest__trades::-webkit-scrollbar-thumb:hover {
+  background: #5d606b;
+  background-clip: padding-box;
+}
+
 .backtest__dialog {
-  width: min(380px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100vw - 32px));
+  height: calc(100vh - 32px);
+  overflow: hidden;
   padding: 14px;
   border: 1px solid #2a2e39;
   border-radius: 8px;
@@ -20,6 +55,7 @@
 
 .backtest__header {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
@@ -51,8 +87,10 @@
 
 .backtest__fields {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  flex-shrink: 0;
+  grid-template-columns: 1fr 1fr 1fr auto;
   gap: 10px;
+  align-items: end;
 }
 
 .backtest__fields label {
@@ -64,7 +102,48 @@
 }
 
 .backtest__amount {
-  grid-column: 1 / -1;
+  grid-column: auto;
+}
+
+.backtest__ratio-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #aab0bc;
+}
+
+.backtest__ratio {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid #2a2e39;
+  border-radius: 6px;
+  background: #1e222d;
+}
+
+.backtest__ratio-button {
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #868993;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.backtest__ratio-button:hover {
+  color: #d1d4dc;
+}
+
+.backtest__ratio-button.is-active {
+  background: #2962ff;
+  color: #fff;
 }
 
 .backtest__fields input {
@@ -80,6 +159,7 @@
 }
 
 .backtest__error {
+  flex-shrink: 0;
   margin: 10px 0 0;
   font-size: 12px;
   color: #f23645;
@@ -87,8 +167,12 @@
 
 .backtest__result {
   display: grid;
-  gap: 8px;
-  margin: 12px 0 0;
+  flex-shrink: 0;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 24px;
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid #2a2e39;
 }
 
 .backtest__result div {
@@ -118,8 +202,59 @@
   color: #f23645;
 }
 
+.backtest__trades {
+  flex: 1;
+  min-height: 0;
+  margin-top: 14px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  border: 1px solid #2a2e39;
+  border-radius: 6px;
+}
+
+.backtest__trades table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.backtest__trades th,
+.backtest__trades td {
+  height: 32px;
+  padding: 0 10px;
+  line-height: 32px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.backtest__trades th {
+  position: sticky;
+  top: 0;
+  background: #1e222d;
+  color: #aab0bc;
+  font-weight: 600;
+}
+
+.backtest__trades td:last-child,
+.backtest__trades th:last-child {
+  text-align: right;
+}
+
+.backtest__trades tbody tr + tr td {
+  box-shadow: inset 0 1px 0 rgba(42, 46, 57, 0.7);
+}
+
+.backtest__trades .is-up {
+  color: #089981;
+}
+
+.backtest__trades .is-down {
+  color: #f23645;
+}
+
 .backtest__actions {
   display: flex;
+  flex-shrink: 0;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 14px;

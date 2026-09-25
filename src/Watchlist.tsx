@@ -47,7 +47,7 @@ export function Watchlist({
   onOpenIndicatorSettings: (indicator: IndicatorId) => void
 }) {
   const [query, setQuery] = useState('')
-  const [sideTab, setSideTab] = useState<'indicators' | 'strategies'>('indicators')
+  const [sideTab, setSideTab] = useState<'indicators' | 'strategies'>('strategies')
   const [tickers, setTickers] = useState<Map<string, PairTicker>>(new Map())
   const [priceMoves, setPriceMoves] = useState<Map<string, 'up' | 'down'>>(new Map())
 
@@ -326,11 +326,6 @@ export function Watchlist({
           id="watchlist-panel-strategies"
           aria-labelledby="watchlist-tab-strategies"
         >
-          <div className="tv-watchlist__backtest-row">
-            <button type="button" className="tv-watchlist__backtest" onClick={onOpenBacktest}>
-              Backtest
-            </button>
-          </div>
           {STRATEGY_ITEMS.map((strategy) => {
             const visible = strategyVisibility[strategy.id]
 
@@ -357,6 +352,11 @@ export function Watchlist({
                         </button>
                       ))}
                     </div>
+                  ) : null}
+                  {strategy.id === LUX_ALGO_ID ? (
+                    <button type="button" className="tv-watchlist__backtest" onClick={onOpenBacktest}>
+                      Backtest
+                    </button>
                   ) : null}
                   <button
                     type="button"

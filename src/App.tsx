@@ -46,6 +46,7 @@ function App() {
             indicatorVisibility={indicatorVisibility}
             strategyVisibility={strategyVisibility}
             rewardRatio={rewardRatio}
+            onRewardRatioChange={setRewardRatio}
             backtestOpen={backtestOpen}
             onBacktestClose={() => setBacktestOpen(false)}
             settingsOpen={settingsOpen}
