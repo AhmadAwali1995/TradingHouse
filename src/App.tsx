@@ -4,6 +4,7 @@ import { Watchlist } from './Watchlist'
 import type { TimeframeId } from './candles'
 import { DEFAULT_PAIR, PAIRS } from './data/config'
 import type { IndicatorId, IndicatorVisibility } from './indicatorCatalog'
+import { defaultStrategyVisibility, type StrategyVisibility } from './strategies'
 import './App.css'
 
 function App() {
@@ -19,6 +20,8 @@ function App() {
     cmMacd: false,
     sma: false,
   })
+  const [strategyVisibility, setStrategyVisibility] =
+    useState<StrategyVisibility>(defaultStrategyVisibility)
 
   const openIndicatorSettings = (indicator: IndicatorId) => {
     if (settingsOpen === indicator) {
@@ -39,6 +42,7 @@ function App() {
             pair={pair}
             timeframe={timeframe}
             indicatorVisibility={indicatorVisibility}
+            strategyVisibility={strategyVisibility}
             settingsOpen={settingsOpen}
             settingsTick={settingsTick}
             onTimeframeChange={setTimeframe}
@@ -51,12 +55,19 @@ function App() {
             timeframe={timeframe}
             selectedId={pair.id}
             indicatorVisibility={indicatorVisibility}
+            strategyVisibility={strategyVisibility}
             settingsOpen={settingsOpen}
             onSelect={setPair}
             onToggleIndicator={(indicator) =>
               setIndicatorVisibility((current) => ({
                 ...current,
                 [indicator]: !current[indicator],
+              }))
+            }
+            onToggleStrategy={(strategy) =>
+              setStrategyVisibility((current) => ({
+                ...current,
+                [strategy]: !current[strategy],
               }))
             }
             onOpenIndicatorSettings={openIndicatorSettings}

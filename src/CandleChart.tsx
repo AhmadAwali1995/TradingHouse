@@ -57,6 +57,7 @@ import {
   type TvMacdSettings,
 } from './indicators'
 import type { IndicatorId, IndicatorVisibility } from './indicatorCatalog'
+import { strategyPositions, type StrategyVisibility } from './strategies'
 import { subscribeLiveCandles } from './klineSocket'
 import { DrawingPrimitive } from './drawings/DrawingPrimitive'
 import { DrawingToolbar } from './drawings/DrawingToolbar'
@@ -976,6 +977,7 @@ export function CandleChart({
   pair,
   timeframe,
   indicatorVisibility,
+  strategyVisibility,
   settingsOpen,
   settingsTick,
   onTimeframeChange,
@@ -984,6 +986,7 @@ export function CandleChart({
   pair: Pair
   timeframe: TimeframeId
   indicatorVisibility: IndicatorVisibility
+  strategyVisibility: StrategyVisibility
   settingsOpen: IndicatorId | null
   settingsTick: number
   onTimeframeChange: (timeframe: TimeframeId) => void
@@ -1019,6 +1022,7 @@ export function CandleChart({
   const smaBbLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
   const la_nweMarkersRef = useRef<LaNweSignalMarkersPrimitive | null>(null)
   const drawingPrimitiveRef = useRef<DrawingPrimitive | null>(null)
+  const strategyPrimitiveRef = useRef<DrawingPrimitive | null>(null)
   const candlesRef = useRef<Candle[]>([])
   const countdownRef = useRef<LastPriceCountdownPrimitive | null>(null)
   const initialRangeRef = useRef<LogicalRange | null>(null)
@@ -1039,6 +1043,7 @@ export function CandleChart({
   const [smaSettings, setSmaSettings] = useState<SmaSettings>(DEFAULT_SMA_SETTINGS)
   const [draftSmaSettings, setDraftSmaSettings] = useState<SmaSettings>(DEFAULT_SMA_SETTINGS)
   const indicatorVisibilityRef = useRef(indicatorVisibility)
+  const strategyVisibilityRef = useRef(strategyVisibility)
   const la_nweSettingsRef = useRef(la_nweSettings)
   const rsiSettingsRef = useRef(rsiSettings)
   const cipherSettingsRef = useRef(cipherSettings)
@@ -1047,6 +1052,7 @@ export function CandleChart({
   const smaSettingsRef = useRef(smaSettings)
   const timeframeRef = useRef(timeframe)
   indicatorVisibilityRef.current = indicatorVisibility
+  strategyVisibilityRef.current = strategyVisibility
   la_nweSettingsRef.current = la_nweSettings
   rsiSettingsRef.current = rsiSettings
   cipherSettingsRef.current = cipherSettings
@@ -1226,10 +1232,13 @@ export function CandleChart({
     series.attachPrimitive(la_nweMarkers)
     const drawings = new DrawingPrimitive()
     series.attachPrimitive(drawings)
+    const strategyDrawings = new DrawingPrimitive()
+    series.attachPrimitive(strategyDrawings)
     seriesRef.current = series
     countdownRef.current = countdown
     la_nweMarkersRef.current = la_nweMarkers
     drawingPrimitiveRef.current = drawings
+    strategyPrimitiveRef.current = strategyDrawings
 
     const la_nweUpper = chart.addSeries(LineSeries, {
       color: '#00897b',
@@ -1310,6 +1319,7 @@ export function CandleChart({
       smaBbUpperRef.current = null
       smaBbLowerRef.current = null
       drawingPrimitiveRef.current = null
+      strategyPrimitiveRef.current = null
       la_nweMarkersRef.current = null
       countdownRef.current = null
       chartRef.current = null
@@ -1637,6 +1647,19 @@ export function CandleChart({
       )
     }
 
+    const paintStrategies = (candles: Candle[]) => {
+      const primitive = strategyPrimitiveRef.current
+      if (!primitive) {
+        return
+      }
+      primitive.setState({
+        drawings: strategyPositions(strategyVisibilityRef.current, {
+          candles,
+          laNweSettings: la_nweSettingsRef.current,
+        }),
+      })
+    }
+
     const paintSma = (candles: Candle[]) => {
       if (!indicatorVisibilityRef.current.sma) {
         smaMa.setData([])
@@ -1668,6 +1691,7 @@ export function CandleChart({
       paintMacd(candles)
       paintLaNwe(candles)
       paintSma(candles)
+      paintStrategies(candles)
     }
 
     const paintLive = (candles: Candle[], candle: Candle) => {
@@ -1684,6 +1708,7 @@ export function CandleChart({
       paintMacd(candles)
       paintLaNwe(candles)
       paintSma(candles)
+      paintStrategies(candles)
       const last = candles.at(-1) ?? null
       setHoverCandle((current) => {
         if (!current || !last || current.time === last.time) {
@@ -1791,6 +1816,24 @@ export function CandleChart({
       ),
     )
   }, [la_nweSettings, chartReady, indicatorVisibility])
+
+  useEffect(() => {
+    const primitive = strategyPrimitiveRef.current
+    if (!chartReady || !primitive) {
+      return
+    }
+    const candles = candlesRef.current
+    if (candles.length === 0) {
+      primitive.setState({ drawings: [] })
+      return
+    }
+    primitive.setState({
+      drawings: strategyPositions(strategyVisibility, {
+        candles,
+        laNweSettings: la_nweSettings,
+      }),
+    })
+  }, [strategyVisibility, la_nweSettings, chartReady, pair, timeframe])
 
   useEffect(() => {
     const smaMa = smaMaRef.current

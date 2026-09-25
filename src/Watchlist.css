@@ -106,6 +106,37 @@
   overflow: auto;
 }
 
+.tv-watchlist__tabs {
+  display: flex;
+  flex-shrink: 0;
+  border-bottom: 1px solid #2a2e39;
+}
+
+.tv-watchlist__tab {
+  flex: 1;
+  height: 32px;
+  margin: 0;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #787b86;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.tv-watchlist__tab.is-active {
+  color: #d1d4dc;
+  border-bottom-color: #2962ff;
+}
+
+.tv-watchlist__tab:hover {
+  color: #d1d4dc;
+}
+
 .tv-watchlist__indicator-list {
   display: flex;
   flex-direction: column;

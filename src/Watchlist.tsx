@@ -6,6 +6,7 @@ import {
   type IndicatorId,
   type IndicatorVisibility,
 } from './indicatorCatalog'
+import { STRATEGY_ITEMS, type StrategyId, type StrategyVisibility } from './strategies'
 import {
   fetchPairTickers,
   formatChangePercent,
@@ -20,21 +21,26 @@ export function Watchlist({
   timeframe,
   selectedId,
   indicatorVisibility,
+  strategyVisibility,
   settingsOpen,
   onSelect,
   onToggleIndicator,
+  onToggleStrategy,
   onOpenIndicatorSettings,
 }: {
   pairs: Pair[]
   timeframe: TimeframeId
   selectedId: string
   indicatorVisibility: IndicatorVisibility
+  strategyVisibility: StrategyVisibility
   settingsOpen: IndicatorId | null
   onSelect: (pair: Pair) => void
   onToggleIndicator: (indicator: IndicatorId) => void
+  onToggleStrategy: (strategy: StrategyId) => void
   onOpenIndicatorSettings: (indicator: IndicatorId) => void
 }) {
   const [query, setQuery] = useState('')
+  const [sideTab, setSideTab] = useState<'indicators' | 'strategies'>('indicators')
   const [tickers, setTickers] = useState<Map<string, PairTicker>>(new Map())
   const [priceMoves, setPriceMoves] = useState<Map<string, 'up' | 'down'>>(new Map())
 
@@ -204,10 +210,37 @@ export function Watchlist({
         </div>
       </div>
       <div className="tv-watchlist__section tv-watchlist__section--indicators">
-        <div className="tv-watchlist__section-header">
-          <span className="tv-watchlist__section-title">Indicators</span>
+        <div className="tv-watchlist__tabs" role="tablist" aria-label="Indicators and strategies">
+          <button
+            type="button"
+            role="tab"
+            id="watchlist-tab-indicators"
+            className={sideTab === 'indicators' ? 'tv-watchlist__tab is-active' : 'tv-watchlist__tab'}
+            aria-selected={sideTab === 'indicators'}
+            aria-controls="watchlist-panel-indicators"
+            onClick={() => setSideTab('indicators')}
+          >
+            Indicators
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="watchlist-tab-strategies"
+            className={sideTab === 'strategies' ? 'tv-watchlist__tab is-active' : 'tv-watchlist__tab'}
+            aria-selected={sideTab === 'strategies'}
+            aria-controls="watchlist-panel-strategies"
+            onClick={() => setSideTab('strategies')}
+          >
+            Strategies
+          </button>
         </div>
-        <div className="tv-watchlist__indicator-list" role="list" aria-label="Indicators">
+        {sideTab === 'indicators' ? (
+        <div
+          className="tv-watchlist__indicator-list"
+          role="tabpanel"
+          id="watchlist-panel-indicators"
+          aria-labelledby="watchlist-tab-indicators"
+        >
           {INDICATOR_ITEMS.map((indicator) => {
             const visible = indicatorVisibility[indicator.id]
 
@@ -279,6 +312,62 @@ export function Watchlist({
             )
           })}
         </div>
+        ) : (
+        <div
+          className="tv-watchlist__indicator-list"
+          role="tabpanel"
+          id="watchlist-panel-strategies"
+          aria-labelledby="watchlist-tab-strategies"
+        >
+          {STRATEGY_ITEMS.map((strategy) => {
+            const visible = strategyVisibility[strategy.id]
+
+            return (
+              <div key={strategy.id} className="tv-watchlist__indicator-row" role="listitem">
+                <span className="tv-watchlist__indicator-name">{strategy.label}</span>
+                <div className="tv-watchlist__indicator-actions">
+                  <button
+                    type="button"
+                    className="tv-watchlist__indicator-toggle"
+                    aria-label={`${visible ? 'Hide' : 'Show'} ${strategy.label}`}
+                    aria-pressed={visible}
+                    onClick={() => onToggleStrategy(strategy.id)}
+                  >
+                    {visible ? (
+                      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+                        <path
+                          d="M10 4c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3C17.5 13.9 14.2 17 10 17S2.5 13.9 1.2 11.1a1.5 1.5 0 0 1 0-1.3C2.5 7.1 5.8 4 10 4Z"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                        />
+                        <circle cx="10" cy="10.5" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+                        <path
+                          d="M3.2 3.2 16.8 16.8"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          d="M6.1 6.1A9.3 9.3 0 0 1 10 5c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3a10.5 10.5 0 0 1-3.2 3.7M8.1 15.2A9.5 9.5 0 0 1 10 16c-4.2 0-7.5-3.1-8.8-5.8a1.5 1.5 0 0 1 0-1.3A10.3 10.3 0 0 1 4 5.9"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        )}
       </div>
     </div>
   )
