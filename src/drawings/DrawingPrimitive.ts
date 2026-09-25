@@ -81,7 +81,17 @@ function drawLine(ctx: CanvasRenderingContext2D, a: XY, b: XY) {
   ctx.stroke()
 }
 
-function drawPosition(ctx: CanvasRenderingContext2D, drawing: PositionDrawing, convert: Converter, mediaHeight: number) {
+function isStrategyPosition(id: string) {
+  return id.startsWith('strategy-')
+}
+
+function drawPosition(
+  ctx: CanvasRenderingContext2D,
+  drawing: PositionDrawing,
+  convert: Converter,
+  mediaHeight: number,
+  showLabels: boolean,
+) {
   const left = convert.timeToX(drawing.startTime)
   const right = convert.timeToX(drawing.endTime)
   const entryY = convert.priceToY(drawing.entryPrice)
@@ -118,6 +128,11 @@ function drawPosition(ctx: CanvasRenderingContext2D, drawing: PositionDrawing, c
   ctx.moveTo(x, entryY)
   ctx.lineTo(x + width, entryY)
   ctx.stroke()
+
+  if (!showLabels) {
+    ctx.restore()
+    return
+  }
 
   ctx.font = '11px system-ui, "Segoe UI", Roboto, sans-serif'
   ctx.textAlign = 'left'
@@ -254,6 +269,7 @@ function drawOne(
   mediaWidth: number,
   mediaHeight: number,
   emphasize: boolean,
+  showPositionLabels = true,
 ) {
   applyLine(ctx, drawing.color, emphasize ? drawing.lineWidth + 1 : drawing.lineWidth, drawing.lineStyle)
 
@@ -316,7 +332,7 @@ function drawOne(
   }
 
   if (drawing.type === 'longPosition' || drawing.type === 'shortPosition') {
-    drawPosition(ctx, drawing, convert, mediaHeight)
+    drawPosition(ctx, drawing, convert, mediaHeight, showPositionLabels)
     return
   }
 
@@ -451,8 +467,17 @@ class DrawingRenderer implements IPrimitivePaneRenderer {
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       for (const drawing of this.state.drawings) {
         const selected = drawing.id === this.state.selectedId
-        drawOne(ctx, drawing, this.convert, mediaSize.width, mediaSize.height, selected || drawing.id === this.state.hoveredId)
-        if (selected) {
+        const strategyPosition = isStrategyPosition(drawing.id)
+        drawOne(
+          ctx,
+          drawing,
+          this.convert,
+          mediaSize.width,
+          mediaSize.height,
+          selected || drawing.id === this.state.hoveredId,
+          !strategyPosition || selected,
+        )
+        if (selected && !strategyPosition) {
           const handles = anchorPoints(drawing)
             .map((point) => toXY(this.convert, point))
             .filter((point): point is XY => point !== null)
@@ -669,6 +694,14 @@ export class DrawingPrimitive implements ISeriesPrimitive {
     }
     this.syncDash()
     this.requestUpdate?.()
+  }
+
+  hitTest(x: number, y: number): DrawingHit | null {
+    const convert = this.converter()
+    if (!convert) {
+      return null
+    }
+    return hitTestDrawing(this.state.drawings, convert, x, y, this.state.selectedId)
   }
 
   converter(): Converter | null {

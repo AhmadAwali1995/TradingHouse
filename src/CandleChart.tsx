@@ -1836,6 +1836,59 @@ export function CandleChart({
   }, [strategyVisibility, la_nweSettings, chartReady, pair, timeframe])
 
   useEffect(() => {
+    const chart = chartRef.current
+    if (!chartReady || !chart) {
+      return
+    }
+    const element = chart.chartElement()
+
+    const localPoint = (event: PointerEvent) => {
+      const rect = element.getBoundingClientRect()
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top }
+    }
+
+    let press: { x: number; y: number } | null = null
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) {
+        return
+      }
+      const local = localPoint(event)
+      press = local
+      const hit = strategyPrimitiveRef.current?.hitTest(local.x, local.y)
+      if (!hit) {
+        return
+      }
+      strategyPrimitiveRef.current?.setState({ selectedId: hit.id })
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.button !== 0) {
+        return
+      }
+      const start = press
+      press = null
+      const local = localPoint(event)
+      if (start && Math.hypot(local.x - start.x, local.y - start.y) > 5) {
+        return
+      }
+      const hit = strategyPrimitiveRef.current?.hitTest(local.x, local.y)
+      if (!hit) {
+        strategyPrimitiveRef.current?.setState({ selectedId: null })
+      }
+    }
+
+    element.addEventListener('pointerdown', onPointerDown, true)
+    element.addEventListener('pointerup', onPointerUp, true)
+    return () => {
+      element.removeEventListener('pointerdown', onPointerDown, true)
+      element.removeEventListener('pointerup', onPointerUp, true)
+    }
+  }, [chartReady])
+
+  useEffect(() => {
     const smaMa = smaMaRef.current
     const smaSmoothing = smaSmoothingRef.current
     const smaBbUpper = smaBbUpperRef.current
