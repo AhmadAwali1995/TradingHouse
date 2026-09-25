@@ -1,5 +1,5 @@
 import type { Candle } from '../../candles'
-import { DEFAULT_ACCOUNT_SIZE, DEFAULT_RISK_PERCENT } from '../../drawings/position'
+import { DEFAULT_ACCOUNT_SIZE, DEFAULT_RISK_PERCENT, positionExitTime } from '../../drawings/position'
 import { DEFAULT_LINE_STYLE, DEFAULT_LINE_WIDTH, type PositionDrawing } from '../../drawings/types'
 import { calculateLaNwe } from '../../indicators'
 import type { LaNwePoint } from '../../indicators/la_nwe'
@@ -42,7 +42,8 @@ export const luxAlgoStrategy = {
     const result = calculateLaNwe(context.candles, context.laNweSettings)
     const candlesByTime = new Map(context.candles.map((candle) => [candle.time, candle]))
     const pointsByTime = new Map(result.points.map((point) => [point.time, point]))
-    const span = barSeconds(context.candles) * 24
+    const bar = barSeconds(context.candles)
+    const lastTime = context.candles.at(-1)?.time ?? 0
     const positions: PositionDrawing[] = []
 
     for (const cross of result.crosses) {
@@ -56,14 +57,21 @@ export const luxAlgoStrategy = {
       if (!levels) {
         continue
       }
+      const type = side === 'long' ? 'longPosition' : 'shortPosition'
+      const exitTime = positionExitTime(
+        { type, startTime: cross.time, targetPrice: levels.targetPrice, stopPrice: levels.stopPrice },
+        context.candles,
+      )
+      const rawEnd = exitTime ?? Math.max(lastTime, cross.time + bar)
+      const endTime = rawEnd - cross.time < bar ? cross.time + bar : rawEnd
       positions.push({
         id: `strategy-luxAlgo-${cross.time}-${cross.direction}`,
-        type: side === 'long' ? 'longPosition' : 'shortPosition',
+        type,
         color: '#d1d4dc',
         lineWidth: DEFAULT_LINE_WIDTH,
         lineStyle: DEFAULT_LINE_STYLE,
         startTime: cross.time,
-        endTime: cross.time + span,
+        endTime,
         accountSize: DEFAULT_ACCOUNT_SIZE,
         riskPercent: DEFAULT_RISK_PERCENT,
         ...levels,

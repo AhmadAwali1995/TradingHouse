@@ -72,22 +72,48 @@ export type PositionBar = {
 
 export type PositionTrigger = 'target' | 'stop' | null
 
-export function positionTrigger(drawing: PositionDrawing, bars: PositionBar[]): PositionTrigger {
+function barHit(
+  drawing: Pick<PositionDrawing, 'type' | 'targetPrice' | 'stopPrice'>,
+  bar: PositionBar,
+): PositionTrigger {
   const long = drawing.type === 'longPosition'
+  const hitTarget = long ? bar.high >= drawing.targetPrice : bar.low <= drawing.targetPrice
+  const hitStop = long ? bar.low <= drawing.stopPrice : bar.high >= drawing.stopPrice
+  if (hitTarget && hitStop) {
+    return Math.abs(bar.open - drawing.stopPrice) <= Math.abs(bar.open - drawing.targetPrice) ? 'stop' : 'target'
+  }
+  if (hitTarget) {
+    return 'target'
+  }
+  if (hitStop) {
+    return 'stop'
+  }
+  return null
+}
+
+export function positionExitTime(
+  drawing: Pick<PositionDrawing, 'type' | 'startTime' | 'targetPrice' | 'stopPrice'>,
+  bars: PositionBar[],
+): number | null {
   for (const bar of bars) {
-    if (bar.time < drawing.startTime) {
+    if (bar.time <= drawing.startTime) {
       continue
     }
-    const hitTarget = long ? bar.high >= drawing.targetPrice : bar.low <= drawing.targetPrice
-    const hitStop = long ? bar.low <= drawing.stopPrice : bar.high >= drawing.stopPrice
-    if (hitTarget && hitStop) {
-      return Math.abs(bar.open - drawing.stopPrice) <= Math.abs(bar.open - drawing.targetPrice) ? 'stop' : 'target'
+    if (barHit(drawing, bar)) {
+      return bar.time
     }
-    if (hitTarget) {
-      return 'target'
+  }
+  return null
+}
+
+export function positionTrigger(drawing: PositionDrawing, bars: PositionBar[]): PositionTrigger {
+  for (const bar of bars) {
+    if (bar.time <= drawing.startTime) {
+      continue
     }
-    if (hitStop) {
-      return 'stop'
+    const hit = barHit(drawing, bar)
+    if (hit) {
+      return hit
     }
   }
   return null
