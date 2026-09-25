@@ -57,7 +57,9 @@ import {
   type TvMacdSettings,
 } from './indicators'
 import type { IndicatorId, IndicatorVisibility } from './indicatorCatalog'
-import { strategyPositions, type StrategyVisibility } from './strategies'
+import { BacktestModal } from './BacktestModal'
+import { runLuxAlgoBacktest } from './backtest/runBacktest'
+import { strategyPositions, type RewardRatio, type StrategyVisibility } from './strategies'
 import { subscribeLiveCandles } from './klineSocket'
 import { DrawingPrimitive } from './drawings/DrawingPrimitive'
 import { DrawingToolbar } from './drawings/DrawingToolbar'
@@ -978,6 +980,9 @@ export function CandleChart({
   timeframe,
   indicatorVisibility,
   strategyVisibility,
+  rewardRatio,
+  backtestOpen,
+  onBacktestClose,
   settingsOpen,
   settingsTick,
   onTimeframeChange,
@@ -987,6 +992,9 @@ export function CandleChart({
   timeframe: TimeframeId
   indicatorVisibility: IndicatorVisibility
   strategyVisibility: StrategyVisibility
+  rewardRatio: RewardRatio
+  backtestOpen: boolean
+  onBacktestClose: () => void
   settingsOpen: IndicatorId | null
   settingsTick: number
   onTimeframeChange: (timeframe: TimeframeId) => void
@@ -1044,6 +1052,7 @@ export function CandleChart({
   const [draftSmaSettings, setDraftSmaSettings] = useState<SmaSettings>(DEFAULT_SMA_SETTINGS)
   const indicatorVisibilityRef = useRef(indicatorVisibility)
   const strategyVisibilityRef = useRef(strategyVisibility)
+  const rewardRatioRef = useRef(rewardRatio)
   const la_nweSettingsRef = useRef(la_nweSettings)
   const rsiSettingsRef = useRef(rsiSettings)
   const cipherSettingsRef = useRef(cipherSettings)
@@ -1053,6 +1062,7 @@ export function CandleChart({
   const timeframeRef = useRef(timeframe)
   indicatorVisibilityRef.current = indicatorVisibility
   strategyVisibilityRef.current = strategyVisibility
+  rewardRatioRef.current = rewardRatio
   la_nweSettingsRef.current = la_nweSettings
   rsiSettingsRef.current = rsiSettings
   cipherSettingsRef.current = cipherSettings
@@ -1656,6 +1666,7 @@ export function CandleChart({
         drawings: strategyPositions(strategyVisibilityRef.current, {
           candles,
           laNweSettings: la_nweSettingsRef.current,
+          rewardRatio: rewardRatioRef.current,
         }),
       })
     }
@@ -1831,9 +1842,10 @@ export function CandleChart({
       drawings: strategyPositions(strategyVisibility, {
         candles,
         laNweSettings: la_nweSettings,
+        rewardRatio,
       }),
     })
-  }, [strategyVisibility, la_nweSettings, chartReady, pair, timeframe])
+  }, [strategyVisibility, rewardRatio, la_nweSettings, chartReady, pair, timeframe])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -2903,6 +2915,25 @@ export function CandleChart({
             settings={selectedFib.settings}
             onChange={updateSelectedFib}
             onClose={() => setSelectedId(null)}
+          />
+        ) : null}
+        {backtestOpen ? (
+          <BacktestModal
+            onClose={onBacktestClose}
+            onRun={(from, to, amount) => {
+              const candles = candlesRef.current
+              if (candles.length === 0) {
+                throw new Error('Chart data is not loaded yet.')
+              }
+              return runLuxAlgoBacktest({
+                candles,
+                laNweSettings: la_nweSettings,
+                rewardRatio,
+                from,
+                to,
+                amount,
+              })
+            }}
           />
         ) : null}
         <div className="candle-chart__controls" aria-label="Chart controls">

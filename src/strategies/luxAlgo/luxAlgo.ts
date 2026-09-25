@@ -2,12 +2,9 @@ import type { Candle } from '../../candles'
 import { DEFAULT_ACCOUNT_SIZE, DEFAULT_RISK_PERCENT, positionExitTime } from '../../drawings/position'
 import { DEFAULT_LINE_STYLE, DEFAULT_LINE_WIDTH, type PositionDrawing } from '../../drawings/types'
 import { calculateLaNwe } from '../../indicators'
-import type { LaNwePoint } from '../../indicators/la_nwe'
 import type { StrategyContext, StrategyDefinition } from '../types'
 
 export const LUX_ALGO_ID = 'luxAlgo' as const
-
-const BAND_BUFFER = 0.1
 
 function barSeconds(candles: Candle[]): number {
   for (let index = candles.length - 1; index > 0; index -= 1) {
@@ -22,16 +19,16 @@ function barSeconds(candles: Candle[]): number {
 function luxAlgoLevels(
   side: 'long' | 'short',
   candle: Candle,
-  point: LaNwePoint,
+  rewardRatio: StrategyContext['rewardRatio'],
 ): { entryPrice: number; targetPrice: number; stopPrice: number } | null {
   const entry = candle.close
-  const target = point.middle
-  const buffer = Math.abs(point.upper - point.middle) * BAND_BUFFER
-  const stop = side === 'long' ? candle.low - buffer : candle.high + buffer
-  const valid = side === 'long' ? stop < entry && entry < target : target < entry && entry < stop
-  if (!valid) {
+  const stop = side === 'long' ? candle.low : candle.high
+  const risk = Math.abs(entry - stop)
+  if (!(risk > 0)) {
     return null
   }
+  const reward = risk * rewardRatio
+  const target = side === 'long' ? entry + reward : entry - reward
   return { entryPrice: entry, targetPrice: target, stopPrice: stop }
 }
 
@@ -41,19 +38,17 @@ export const luxAlgoStrategy = {
   positions(context: StrategyContext): PositionDrawing[] {
     const result = calculateLaNwe(context.candles, context.laNweSettings)
     const candlesByTime = new Map(context.candles.map((candle) => [candle.time, candle]))
-    const pointsByTime = new Map(result.points.map((point) => [point.time, point]))
     const bar = barSeconds(context.candles)
     const lastTime = context.candles.at(-1)?.time ?? 0
     const positions: PositionDrawing[] = []
 
     for (const cross of result.crosses) {
       const candle = candlesByTime.get(cross.time)
-      const point = pointsByTime.get(cross.time)
-      if (!candle || !point) {
+      if (!candle) {
         continue
       }
       const side = cross.direction === 'up' ? 'long' : 'short'
-      const levels = luxAlgoLevels(side, candle, point)
+      const levels = luxAlgoLevels(side, candle, context.rewardRatio)
       if (!levels) {
         continue
       }

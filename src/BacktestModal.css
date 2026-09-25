@@ -1,0 +1,151 @@
+.backtest {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.backtest__dialog {
+  width: min(380px, calc(100vw - 32px));
+  padding: 14px;
+  border: 1px solid #2a2e39;
+  border-radius: 8px;
+  background: #131722;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  color: #d1d4dc;
+}
+
+.backtest__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.backtest__header h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.backtest__close {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #868993;
+  font-size: 18px;
+  line-height: 24px;
+  cursor: pointer;
+}
+
+.backtest__close:hover {
+  background: #1e222d;
+  color: #d1d4dc;
+}
+
+.backtest__fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.backtest__fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #aab0bc;
+}
+
+.backtest__amount {
+  grid-column: 1 / -1;
+}
+
+.backtest__fields input {
+  width: 100%;
+  color-scheme: dark;
+  padding: 6px 8px;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  background: #1e222d;
+  color: #d1d4dc;
+  font: inherit;
+  font-size: 12px;
+}
+
+.backtest__error {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #f23645;
+}
+
+.backtest__result {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.backtest__result div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.backtest__result dt {
+  margin: 0;
+  font-size: 12px;
+  color: #aab0bc;
+}
+
+.backtest__result dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.backtest__result .is-up {
+  color: #089981;
+}
+
+.backtest__result .is-down {
+  color: #f23645;
+}
+
+.backtest__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.backtest__button {
+  padding: 6px 10px;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  background: #1e222d;
+  color: #d1d4dc;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.backtest__button:hover {
+  background: #2a2e39;
+}
+
+.backtest__button--primary {
+  border-color: #2962ff;
+  background: #2962ff;
+  color: #fff;
+}
+
+.backtest__button--primary:hover {
+  background: #1f4ed8;
+}

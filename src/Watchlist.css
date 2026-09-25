@@ -137,6 +137,29 @@
   color: #d1d4dc;
 }
 
+.tv-watchlist__backtest-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 12px 0;
+}
+
+.tv-watchlist__backtest {
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  background: #1e222d;
+  color: #d1d4dc;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tv-watchlist__backtest:hover {
+  border-color: #2962ff;
+  color: #fff;
+}
+
 .tv-watchlist__indicator-list {
   display: flex;
   flex-direction: column;
@@ -187,6 +210,39 @@
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+}
+
+.tv-watchlist__ratio {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 6px;
+  padding: 2px;
+  border: 1px solid #2a2e39;
+  border-radius: 6px;
+  background: #131722;
+}
+
+.tv-watchlist__ratio-button {
+  height: 20px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #868993;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.tv-watchlist__ratio-button:hover {
+  color: #d1d4dc;
+}
+
+.tv-watchlist__ratio-button.is-active {
+  background: #2962ff;
+  color: #fff;
 }
 
 .tv-watchlist__row {

@@ -6,7 +6,8 @@ import {
   type IndicatorId,
   type IndicatorVisibility,
 } from './indicatorCatalog'
-import { STRATEGY_ITEMS, type StrategyId, type StrategyVisibility } from './strategies'
+import { LUX_ALGO_ID } from './strategies/luxAlgo'
+import { STRATEGY_ITEMS, type RewardRatio, type StrategyId, type StrategyVisibility } from './strategies'
 import {
   fetchPairTickers,
   formatChangePercent,
@@ -22,10 +23,13 @@ export function Watchlist({
   selectedId,
   indicatorVisibility,
   strategyVisibility,
+  rewardRatio,
   settingsOpen,
   onSelect,
   onToggleIndicator,
   onToggleStrategy,
+  onRewardRatioChange,
+  onOpenBacktest,
   onOpenIndicatorSettings,
 }: {
   pairs: Pair[]
@@ -33,10 +37,13 @@ export function Watchlist({
   selectedId: string
   indicatorVisibility: IndicatorVisibility
   strategyVisibility: StrategyVisibility
+  rewardRatio: RewardRatio
   settingsOpen: IndicatorId | null
   onSelect: (pair: Pair) => void
   onToggleIndicator: (indicator: IndicatorId) => void
   onToggleStrategy: (strategy: StrategyId) => void
+  onRewardRatioChange: (ratio: RewardRatio) => void
+  onOpenBacktest: () => void
   onOpenIndicatorSettings: (indicator: IndicatorId) => void
 }) {
   const [query, setQuery] = useState('')
@@ -319,6 +326,11 @@ export function Watchlist({
           id="watchlist-panel-strategies"
           aria-labelledby="watchlist-tab-strategies"
         >
+          <div className="tv-watchlist__backtest-row">
+            <button type="button" className="tv-watchlist__backtest" onClick={onOpenBacktest}>
+              Backtest
+            </button>
+          </div>
           {STRATEGY_ITEMS.map((strategy) => {
             const visible = strategyVisibility[strategy.id]
 
@@ -326,6 +338,26 @@ export function Watchlist({
               <div key={strategy.id} className="tv-watchlist__indicator-row" role="listitem">
                 <span className="tv-watchlist__indicator-name">{strategy.label}</span>
                 <div className="tv-watchlist__indicator-actions">
+                  {strategy.id === LUX_ALGO_ID ? (
+                    <div className="tv-watchlist__ratio" role="radiogroup" aria-label="Reward to risk">
+                      {([2, 3] as const).map((ratio) => (
+                        <button
+                          key={ratio}
+                          type="button"
+                          className={
+                            rewardRatio === ratio
+                              ? 'tv-watchlist__ratio-button is-active'
+                              : 'tv-watchlist__ratio-button'
+                          }
+                          role="radio"
+                          aria-checked={rewardRatio === ratio}
+                          onClick={() => onRewardRatioChange(ratio)}
+                        >
+                          1:{ratio}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                   <button
                     type="button"
                     className="tv-watchlist__indicator-toggle"

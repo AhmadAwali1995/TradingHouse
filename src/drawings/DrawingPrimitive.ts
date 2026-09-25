@@ -137,13 +137,25 @@ function drawPosition(
   ctx.font = '11px system-ui, "Segoe UI", Roboto, sans-serif'
   ctx.textAlign = 'left'
   ctx.fillStyle = '#089981'
-  ctx.textBaseline = 'top'
-  const targetTextY = Math.min(Math.max(profitTop + 4, 4), Math.max(4, entryY - 16))
-  ctx.fillText(stats.targetLabel, x + 6, targetTextY)
+  if (targetY <= entryY) {
+    ctx.textBaseline = 'top'
+    ctx.fillText(stats.targetLabel, x + 6, Math.min(Math.max(profitTop + 4, 4), Math.max(4, entryY - 16)))
+  } else {
+    ctx.textBaseline = 'bottom'
+    ctx.fillText(
+      stats.targetLabel,
+      x + 6,
+      Math.max(Math.min(profitTop + profitHeight - 4, mediaHeight - 4), entryY + 16),
+    )
+  }
   ctx.fillStyle = '#f23645'
-  ctx.textBaseline = 'bottom'
-  const stopTextY = Math.max(Math.min(stopTop + stopHeight - 4, mediaHeight - 4), entryY + 16)
-  ctx.fillText(stats.stopLabel, x + 6, stopTextY)
+  if (stopY <= entryY) {
+    ctx.textBaseline = 'top'
+    ctx.fillText(stats.stopLabel, x + 6, Math.min(Math.max(stopTop + 4, 4), Math.max(4, entryY - 16)))
+  } else {
+    ctx.textBaseline = 'bottom'
+    ctx.fillText(stats.stopLabel, x + 6, Math.max(Math.min(stopTop + stopHeight - 4, mediaHeight - 4), entryY + 16))
+  }
   ctx.restore()
 }
 
