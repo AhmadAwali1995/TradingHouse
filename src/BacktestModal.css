@@ -42,15 +42,20 @@
 .backtest__dialog {
   display: flex;
   flex-direction: column;
-  width: min(760px, calc(100vw - 32px));
-  height: calc(100vh - 32px);
-  overflow: hidden;
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
   padding: 14px;
   border: 1px solid #2a2e39;
   border-radius: 8px;
   background: #131722;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
   color: #d1d4dc;
+}
+
+.backtest__dialog.is-expanded {
+  height: calc(100vh - 32px);
+  overflow: hidden;
 }
 
 .backtest__header {
@@ -88,10 +93,11 @@
 .backtest__fields {
   display: grid;
   flex-shrink: 0;
-  grid-template-columns: 1fr 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
   align-items: end;
 }
+
 
 .backtest__fields label {
   display: flex;
@@ -114,27 +120,32 @@
 }
 
 .backtest__ratio {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  height: 30px;
-  padding: 2px;
+  display: flex;
+  width: 100%;
+  height: 32px;
+  overflow: hidden;
   border: 1px solid #2a2e39;
-  border-radius: 6px;
+  border-radius: 4px;
   background: #1e222d;
 }
 
 .backtest__ratio-button {
-  height: 24px;
-  padding: 0 10px;
+  flex: 1;
+  height: 100%;
+  padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-right: 1px solid #2a2e39;
+  border-radius: 0;
   background: transparent;
   color: #868993;
   font: inherit;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.backtest__ratio-button:last-child {
+  border-right: 0;
 }
 
 .backtest__ratio-button:hover {
@@ -146,10 +157,12 @@
   color: #fff;
 }
 
-.backtest__fields input {
+.backtest__fields input,
+.backtest__fields select {
   width: 100%;
+  height: 32px;
   color-scheme: dark;
-  padding: 6px 8px;
+  padding: 0 8px;
   border: 1px solid #2a2e39;
   border-radius: 4px;
   background: #1e222d;
@@ -174,6 +187,7 @@
   padding-top: 12px;
   border-top: 1px solid #2a2e39;
 }
+
 
 .backtest__result div {
   display: flex;
@@ -275,6 +289,11 @@
   background: #2a2e39;
 }
 
+.backtest__button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .backtest__button--primary {
   border-color: #2962ff;
   background: #2962ff;
@@ -283,4 +302,8 @@
 
 .backtest__button--primary:hover {
   background: #1f4ed8;
+}
+
+.backtest__button--primary:disabled:hover {
+  background: #2962ff;
 }

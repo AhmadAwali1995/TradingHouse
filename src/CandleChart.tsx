@@ -58,7 +58,6 @@ import {
 } from './indicators'
 import type { IndicatorId, IndicatorVisibility } from './indicatorCatalog'
 import { BacktestModal } from './BacktestModal'
-import { runLuxAlgoBacktest } from './backtest/runBacktest'
 import { strategyPositions, type RewardRatio, type StrategyVisibility } from './strategies'
 import { subscribeLiveCandles } from './klineSocket'
 import { DrawingPrimitive } from './drawings/DrawingPrimitive'
@@ -2921,25 +2920,12 @@ export function CandleChart({
         ) : null}
         {backtestOpen ? (
           <BacktestModal
+            pair={pair}
+            timeframe={timeframe}
+            laNweSettings={la_nweSettings}
             rewardRatio={rewardRatio}
             onRewardRatioChange={onRewardRatioChange}
-            firstTime={candlesRef.current[0]?.time ?? null}
-            lastTime={candlesRef.current.at(-1)?.time ?? null}
             onClose={onBacktestClose}
-            onRun={(from, to, amount, ratio) => {
-              const candles = candlesRef.current
-              if (candles.length === 0) {
-                throw new Error('Chart data is not loaded yet.')
-              }
-              return runLuxAlgoBacktest({
-                candles,
-                laNweSettings: la_nweSettings,
-                rewardRatio: ratio,
-                from,
-                to,
-                amount,
-              })
-            }}
           />
         ) : null}
         <div className="candle-chart__controls" aria-label="Chart controls">
