@@ -4,7 +4,7 @@ import { Watchlist } from './Watchlist'
 import type { TimeframeId } from './candles'
 import { DEFAULT_PAIR, PAIRS } from './data/config'
 import type { IndicatorId, IndicatorVisibility } from './indicatorCatalog'
-import { defaultStrategyVisibility, type RewardRatio, type StrategyVisibility } from './strategies'
+import { defaultStrategyVisibility, type RewardRatio, type StrategyId, type StrategyVisibility } from './strategies'
 import './App.css'
 
 function App() {
@@ -23,7 +23,7 @@ function App() {
   const [strategyVisibility, setStrategyVisibility] =
     useState<StrategyVisibility>(defaultStrategyVisibility)
   const [rewardRatio, setRewardRatio] = useState<RewardRatio>(2)
-  const [backtestOpen, setBacktestOpen] = useState(false)
+  const [backtestStrategy, setBacktestStrategy] = useState<StrategyId | null>(null)
 
   const openIndicatorSettings = (indicator: IndicatorId) => {
     if (settingsOpen === indicator) {
@@ -47,8 +47,8 @@ function App() {
             strategyVisibility={strategyVisibility}
             rewardRatio={rewardRatio}
             onRewardRatioChange={setRewardRatio}
-            backtestOpen={backtestOpen}
-            onBacktestClose={() => setBacktestOpen(false)}
+            backtestStrategy={backtestStrategy}
+            onBacktestClose={() => setBacktestStrategy(null)}
             settingsOpen={settingsOpen}
             settingsTick={settingsTick}
             onTimeframeChange={setTimeframe}
@@ -78,7 +78,7 @@ function App() {
               }))
             }
             onRewardRatioChange={setRewardRatio}
-            onOpenBacktest={() => setBacktestOpen(true)}
+            onOpenBacktest={setBacktestStrategy}
             onOpenIndicatorSettings={openIndicatorSettings}
           />
         </aside>

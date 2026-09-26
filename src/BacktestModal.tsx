@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { TIMEFRAMES, type Candle, type TimeframeId } from './candles'
 import type { LaNweSettings } from './indicators'
 import { runLuxAlgoBacktest, type BacktestResult } from './backtest/runBacktest'
-import type { RewardRatio } from './strategies'
+import { STRATEGY_ITEMS, type RewardRatio, type StrategyId } from './strategies'
 import './BacktestModal.css'
 
 function dateInputValue(date: Date): string {
@@ -89,6 +89,7 @@ export function BacktestModal({
   laNweSettings,
   rewardRatio,
   onRewardRatioChange,
+  strategyId,
   onClose,
 }: {
   candles: Candle[]
@@ -97,6 +98,7 @@ export function BacktestModal({
   laNweSettings: LaNweSettings
   rewardRatio: RewardRatio
   onRewardRatioChange: (ratio: RewardRatio) => void
+  strategyId: StrategyId
   onClose: () => void
 }) {
   const [month, setMonth] = useState('')
@@ -189,6 +191,7 @@ export function BacktestModal({
         from: fromTime,
         to: toTime,
         amount: invested,
+        strategyId,
       }),
     )
   }
@@ -203,7 +206,9 @@ export function BacktestModal({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="backtest__header">
-          <h2 id="backtest-title">Backtest</h2>
+          <h2 id="backtest-title">
+            Backtest · {STRATEGY_ITEMS.find((strategy) => strategy.id === strategyId)?.label ?? 'Strategy'}
+          </h2>
           <button type="button" className="backtest__close" aria-label="Close" onClick={onClose}>
             ×
           </button>
@@ -352,7 +357,15 @@ export function BacktestModal({
                       <tr key={`${trade.time}-${trade.side}`}>
                         <td>{formatWhen(trade.time)}</td>
                         <td>{trade.side === 'long' ? 'Long' : 'Short'}</td>
-                        <td>{trade.result === 'target' ? 'Target' : trade.result === 'stop' ? 'Stop' : 'Open'}</td>
+                        <td>
+                          {trade.result === 'target'
+                            ? 'Target'
+                            : trade.result === 'stop'
+                              ? 'Stop'
+                              : trade.result === 'signal'
+                                ? 'Signal'
+                                : 'Open'}
+                        </td>
                         <td className={moneyClass(trade.profit)}>
                           {trade.result === 'open' ? '—' : formatSignedMoney(trade.profit)}
                         </td>

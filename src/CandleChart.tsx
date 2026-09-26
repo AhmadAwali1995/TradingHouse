@@ -59,7 +59,7 @@ import {
 } from './indicators'
 import type { IndicatorId, IndicatorVisibility } from './indicatorCatalog'
 import { BacktestModal } from './BacktestModal'
-import { strategyPositions, type RewardRatio, type StrategyVisibility } from './strategies'
+import { strategyPositions, type RewardRatio, type StrategyId, type StrategyVisibility } from './strategies'
 import { subscribeLiveCandles } from './klineSocket'
 import { DrawingPrimitive } from './drawings/DrawingPrimitive'
 import { DrawingToolbar } from './drawings/DrawingToolbar'
@@ -1054,7 +1054,7 @@ export function CandleChart({
   strategyVisibility,
   rewardRatio,
   onRewardRatioChange,
-  backtestOpen,
+  backtestStrategy,
   onBacktestClose,
   settingsOpen,
   settingsTick,
@@ -1067,7 +1067,7 @@ export function CandleChart({
   strategyVisibility: StrategyVisibility
   rewardRatio: RewardRatio
   onRewardRatioChange: (ratio: RewardRatio) => void
-  backtestOpen: boolean
+  backtestStrategy: StrategyId | null
   onBacktestClose: () => void
   settingsOpen: IndicatorId | null
   settingsTick: number
@@ -3042,14 +3042,16 @@ export function CandleChart({
             onClose={() => setSelectedId(null)}
           />
         ) : null}
-        {backtestOpen ? (
+        {backtestStrategy ? (
           <BacktestModal
+            key={backtestStrategy}
             candles={loadedCandles}
             timeframe={timeframe}
             onTimeframeChange={onTimeframeChange}
             laNweSettings={la_nweSettings}
             rewardRatio={rewardRatio}
             onRewardRatioChange={onRewardRatioChange}
+            strategyId={backtestStrategy}
             onClose={onBacktestClose}
           />
         ) : null}

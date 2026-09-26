@@ -107,8 +107,12 @@ export function positionExitTime(
 }
 
 export function positionTrigger(drawing: PositionDrawing, bars: PositionBar[]): PositionTrigger {
+  const closedEarly = drawing.id.startsWith('strategy-luxAlgoEnh-')
   for (const bar of bars) {
     if (bar.time <= drawing.startTime) {
+      continue
+    }
+    if (closedEarly && bar.time > drawing.endTime) {
       continue
     }
     const hit = barHit(drawing, bar)

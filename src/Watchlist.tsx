@@ -7,6 +7,7 @@ import {
   type IndicatorVisibility,
 } from './indicatorCatalog'
 import { LUX_ALGO_ID } from './strategies/luxAlgo'
+import { LUX_ALGO_ENH_ID } from './strategies/luxAlgoEnh'
 import { STRATEGY_ITEMS, type RewardRatio, type StrategyId, type StrategyVisibility } from './strategies'
 import {
   fetchPairTickers,
@@ -43,7 +44,7 @@ export function Watchlist({
   onToggleIndicator: (indicator: IndicatorId) => void
   onToggleStrategy: (strategy: StrategyId) => void
   onRewardRatioChange: (ratio: RewardRatio) => void
-  onOpenBacktest: () => void
+  onOpenBacktest: (strategy: StrategyId) => void
   onOpenIndicatorSettings: (indicator: IndicatorId) => void
 }) {
   const [query, setQuery] = useState('')
@@ -362,7 +363,7 @@ export function Watchlist({
               <div key={strategy.id} className="tv-watchlist__indicator-row" role="listitem">
                 <span className="tv-watchlist__indicator-name">{strategy.label}</span>
                 <div className="tv-watchlist__indicator-actions">
-                  {strategy.id === LUX_ALGO_ID ? (
+                  {strategy.id === LUX_ALGO_ID || strategy.id === LUX_ALGO_ENH_ID ? (
                     <div className="tv-watchlist__ratio" role="radiogroup" aria-label="Reward to risk">
                       {([2, 3] as const).map((ratio) => (
                         <button
@@ -382,8 +383,12 @@ export function Watchlist({
                       ))}
                     </div>
                   ) : null}
-                  {strategy.id === LUX_ALGO_ID ? (
-                    <button type="button" className="tv-watchlist__backtest" onClick={onOpenBacktest}>
+                  {strategy.id === LUX_ALGO_ID || strategy.id === LUX_ALGO_ENH_ID ? (
+                    <button
+                      type="button"
+                      className="tv-watchlist__backtest"
+                      onClick={() => onOpenBacktest(strategy.id)}
+                    >
                       Backtest
                     </button>
                   ) : null}
