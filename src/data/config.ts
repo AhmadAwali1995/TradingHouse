@@ -3,12 +3,15 @@ import pairsJson from './pairs.json' with { type: 'json' }
 
 export type ApiLinkId = keyof typeof apiLinksJson
 
+export type Market = 'crypto' | 'forex'
+
 export type Pair = {
   id: string
   name: string
   symbol: string
   baseAsset: string
   quoteAsset: string
+  market: Market
   api: ApiLinkId
 }
 

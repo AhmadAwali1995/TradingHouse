@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { TIMEFRAMES, fetchCandles, type Candle, type TimeframeId } from './candles'
-import type { Pair } from './data/config'
+import { TIMEFRAMES, type Candle, type TimeframeId } from './candles'
 import type { LaNweSettings } from './indicators'
 import { runLuxAlgoBacktest, type BacktestResult } from './backtest/runBacktest'
 import type { RewardRatio } from './strategies'
@@ -84,23 +83,22 @@ function monthRange(month: string): { from: string; to: string } {
 }
 
 export function BacktestModal({
-  pair,
+  candles,
   timeframe,
+  onTimeframeChange,
   laNweSettings,
   rewardRatio,
   onRewardRatioChange,
   onClose,
 }: {
-  pair: Pair
+  candles: Candle[]
   timeframe: TimeframeId
+  onTimeframeChange: (timeframe: TimeframeId) => void
   laNweSettings: LaNweSettings
   rewardRatio: RewardRatio
   onRewardRatioChange: (ratio: RewardRatio) => void
   onClose: () => void
 }) {
-  const [selectedTimeframe, setSelectedTimeframe] = useState(timeframe)
-  const [candles, setCandles] = useState<Candle[]>([])
-  const [loading, setLoading] = useState(true)
   const [month, setMonth] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -113,45 +111,14 @@ export function BacktestModal({
   const maxDate = lastTime === null ? '' : unixToDateInput(lastTime)
 
   useEffect(() => {
-    const controller = new AbortController()
-    setLoading(true)
-    setError(null)
-    setResult(null)
+    if (!minDate || !maxDate) {
+      return
+    }
+    setFrom((current) => (current ? clampDate(current, minDate, maxDate) : initialFrom(minDate, maxDate)))
+    setTo((current) => (current ? clampDate(current, minDate, maxDate) : maxDate))
     setMonth('')
-
-    fetchCandles(pair, selectedTimeframe, controller.signal)
-      .then((next) => {
-        if (controller.signal.aborted) {
-          return
-        }
-        setCandles(next)
-        const first = next[0]?.time
-        const last = next.at(-1)?.time
-        if (first === undefined || last === undefined) {
-          setFrom('')
-          setTo('')
-          setError('No candles for this timeframe.')
-        } else {
-          const nextMin = unixToDateInput(first)
-          const nextMax = unixToDateInput(last)
-          setFrom(initialFrom(nextMin, nextMax))
-          setTo(nextMax)
-        }
-        setLoading(false)
-      })
-      .catch((reason: unknown) => {
-        if (controller.signal.aborted) {
-          return
-        }
-        setCandles([])
-        setFrom('')
-        setTo('')
-        setLoading(false)
-        setError(reason instanceof Error ? reason.message : 'Failed to load candles.')
-      })
-
-    return () => controller.abort()
-  }, [pair, selectedTimeframe])
+    setResult(null)
+  }, [minDate, maxDate])
 
   const chooseMonth = (value: string) => {
     setMonth(value)
@@ -213,22 +180,17 @@ export function BacktestModal({
       setResult(null)
       return
     }
-    try {
-      setError(null)
-      setResult(
-        runLuxAlgoBacktest({
-          candles,
-          laNweSettings,
-          rewardRatio,
-          from: fromTime,
-          to: toTime,
-          amount: invested,
-        }),
-      )
-    } catch (reason: unknown) {
-      setResult(null)
-      setError(reason instanceof Error ? reason.message : 'Backtest failed.')
-    }
+    setError(null)
+    setResult(
+      runLuxAlgoBacktest({
+        candles,
+        laNweSettings,
+        rewardRatio,
+        from: fromTime,
+        to: toTime,
+        amount: invested,
+      }),
+    )
   }
 
   return (
@@ -250,8 +212,8 @@ export function BacktestModal({
           <label>
             <span>Timeframe</span>
             <select
-              value={selectedTimeframe}
-              onChange={(event) => setSelectedTimeframe(event.target.value as TimeframeId)}
+              value={timeframe}
+              onChange={(event) => onTimeframeChange(event.target.value as TimeframeId)}
             >
               {TIMEFRAMES.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -410,9 +372,9 @@ export function BacktestModal({
             type="button"
             className="backtest__button backtest__button--primary"
             onClick={submit}
-            disabled={loading || candles.length === 0}
+            disabled={candles.length === 0}
           >
-            {loading ? 'Loading…' : 'Run'}
+            Run
           </button>
         </div>
       </div>

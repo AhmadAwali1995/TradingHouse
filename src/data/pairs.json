@@ -5,6 +5,7 @@
     "symbol": "BTCUSDT",
     "baseAsset": "BTC",
     "quoteAsset": "USDT",
+    "market": "crypto",
     "api": "binanceKlines"
   },
   {
@@ -13,6 +14,7 @@
     "symbol": "ETHUSDT",
     "baseAsset": "ETH",
     "quoteAsset": "USDT",
+    "market": "crypto",
     "api": "binanceKlines"
   },
   {
@@ -21,6 +23,7 @@
     "symbol": "SOLUSDT",
     "baseAsset": "SOL",
     "quoteAsset": "USDT",
+    "market": "crypto",
     "api": "binanceKlines"
   },
   {
@@ -29,6 +32,7 @@
     "symbol": "BNBUSDT",
     "baseAsset": "BNB",
     "quoteAsset": "USDT",
+    "market": "crypto",
     "api": "binanceKlines"
   },
   {
@@ -37,6 +41,7 @@
     "symbol": "LINKUSDT",
     "baseAsset": "LINK",
     "quoteAsset": "USDT",
+    "market": "crypto",
     "api": "binanceKlines"
   },
   {
@@ -45,6 +50,7 @@
     "symbol": "AVAXUSDT",
     "baseAsset": "AVAX",
     "quoteAsset": "USDT",
+    "market": "crypto",
     "api": "binanceKlines"
   },
   {
@@ -53,6 +59,7 @@
     "symbol": "QNTUSDT",
     "baseAsset": "QNT",
     "quoteAsset": "USDT",
+    "market": "crypto",
     "api": "binanceKlines"
   },
   {
@@ -61,6 +68,34 @@
     "symbol": "XRPUSDT",
     "baseAsset": "XRP",
     "quoteAsset": "USDT",
+    "market": "crypto",
+    "api": "binanceKlines"
+  },
+  {
+    "id": "eur-usd",
+    "name": "Euro",
+    "symbol": "EUR/USD",
+    "baseAsset": "EUR",
+    "quoteAsset": "USD",
+    "market": "forex",
+    "api": "binanceKlines"
+  },
+  {
+    "id": "gbp-usd",
+    "name": "British Pound",
+    "symbol": "GBP/USD",
+    "baseAsset": "GBP",
+    "quoteAsset": "USD",
+    "market": "forex",
+    "api": "binanceKlines"
+  },
+  {
+    "id": "usd-jpy",
+    "name": "Japanese Yen",
+    "symbol": "USD/JPY",
+    "baseAsset": "USD",
+    "quoteAsset": "JPY",
+    "market": "forex",
     "api": "binanceKlines"
   }
 ]

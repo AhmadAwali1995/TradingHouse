@@ -22,6 +22,7 @@ import {
   applyLiveCandle,
   fetchCandles,
   type Candle,
+  type CandleRange,
   type TimeframeId,
 } from './candles'
 import type { Pair } from './data/config'
@@ -965,6 +966,78 @@ function formatVolume(value: number): string {
   return formatLastPrice(value)
 }
 
+function dateInputValue(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+function startOfDay(value: string): number {
+  const [year, month, day] = value.split('-').map(Number)
+  return Math.floor(new Date(year, month - 1, day).getTime() / 1000)
+}
+
+function endOfDay(value: string): number {
+  const [year, month, day] = value.split('-').map(Number)
+  return Math.floor(new Date(year, month - 1, day, 23, 59, 59).getTime() / 1000)
+}
+
+function ChartRangePicker({
+  candles,
+  range,
+  onApply,
+  onReset,
+  onClose,
+}: {
+  candles: Candle[]
+  range: CandleRange | null
+  onApply: (range: CandleRange) => void
+  onReset: () => void
+  onClose: () => void
+}) {
+  const first = candles[0]?.time
+  const last = candles.at(-1)?.time
+  const [from, setFrom] = useState(range ? dateInputValue(new Date(range.from * 1000)) : first ? dateInputValue(new Date(first * 1000)) : '')
+  const [to, setTo] = useState(range ? dateInputValue(new Date(range.to * 1000)) : last ? dateInputValue(new Date(last * 1000)) : '')
+  const maxDate = dateInputValue(new Date())
+
+  return (
+    <form
+      className="candle-chart__range-popover"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (!from || !to) {
+          return
+        }
+        const start = startOfDay(from)
+        const end = endOfDay(to)
+        if (end < start) {
+          return
+        }
+        onApply({ from: start, to: end })
+      }}
+    >
+      <label>
+        <span>From</span>
+        <input type="date" max={maxDate} value={from} onChange={(event) => setFrom(event.target.value)} />
+      </label>
+      <label>
+        <span>To</span>
+        <input type="date" max={maxDate} value={to} onChange={(event) => setTo(event.target.value)} />
+      </label>
+      <div className="candle-chart__range-actions">
+        <button type="button" onClick={onReset}>
+          Default
+        </button>
+        <button type="submit">Load</button>
+        <button type="button" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    </form>
+  )
+}
+
 function candleChange(candle: Candle, candles: Candle[]) {
   const index = candles.findIndex((item) => item.time === candle.time)
   const previous = index > 0 ? candles[index - 1] : null
@@ -1038,6 +1111,9 @@ export function CandleChart({
   const [chartReady, setChartReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [loadedCandles, setLoadedCandles] = useState<Candle[]>([])
+  const [chartRange, setChartRange] = useState<CandleRange | null>(null)
+  const [rangeOpen, setRangeOpen] = useState(false)
   const [hoverCandle, setHoverCandle] = useState<Candle | null>(null)
   const [rsiSettings, setRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
   const [draftRsiSettings, setDraftRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
@@ -1730,7 +1806,20 @@ export function CandleChart({
       })
     }
 
-    void fetchCandles(pair, timeframe, controller.signal)
+    if (pair.market !== 'crypto') {
+      paintHistory([])
+      candlesRef.current = []
+      setLoadedCandles([])
+      setHoverCandle(null)
+      setLoading(false)
+      setError('Forex prices are not connected yet.')
+      return () => {
+        closed = true
+        controller.abort()
+      }
+    }
+
+    void fetchCandles(pair, timeframe, controller.signal, chartRange ?? undefined)
       .then((history) => {
         if (closed || controller.signal.aborted || seriesRef.current !== series) {
           return
@@ -1738,6 +1827,7 @@ export function CandleChart({
 
         const candles = [...history]
         candlesRef.current = candles
+        setLoadedCandles(candles)
         paintHistory(candles)
         setHoverCandle(candles.at(-1) ?? null)
         setLoading(false)
@@ -1755,8 +1845,15 @@ export function CandleChart({
             if (controller.signal.aborted || seriesRef.current !== series) {
               return
             }
+            if (chartRange && candle.time > chartRange.to) {
+              return
+            }
+            const count = candles.length
             if (applyLiveCandle(candles, candle)) {
               candlesRef.current = candles
+              if (candles.length !== count) {
+                setLoadedCandles([...candles])
+              }
               paintLive(candles, candle)
             }
           },
@@ -1786,7 +1883,7 @@ export function CandleChart({
       live?.close()
       candlesRef.current = []
     }
-  }, [pair, timeframe, chartReady])
+  }, [pair, timeframe, chartReady, chartRange])
 
   useEffect(() => {
     const la_nweUpper = la_nweUpperRef.current
@@ -2184,6 +2281,32 @@ export function CandleChart({
             </span>
           ) : null}
         </div>
+        <div className="candle-chart__header-tools">
+        <div className="candle-chart__range">
+          <button
+            type="button"
+            className={chartRange || rangeOpen ? 'candle-chart__timeframe is-active' : 'candle-chart__timeframe'}
+            aria-expanded={rangeOpen}
+            onClick={() => setRangeOpen((open) => !open)}
+          >
+            Range
+          </button>
+          {rangeOpen ? (
+            <ChartRangePicker
+              candles={loadedCandles}
+              range={chartRange}
+              onClose={() => setRangeOpen(false)}
+              onApply={(range) => {
+                setChartRange(range)
+                setRangeOpen(false)
+              }}
+              onReset={() => {
+                setChartRange(null)
+                setRangeOpen(false)
+              }}
+            />
+          ) : null}
+        </div>
         <div className="candle-chart__timeframes" role="tablist" aria-label="Timeframes">
           {TIMEFRAMES.map((item) => (
             <button
@@ -2198,9 +2321,10 @@ export function CandleChart({
               }
               onClick={() => onTimeframeChange(item.id)}
             >
-              {item.label}
-            </button>
+            {item.label}
+          </button>
           ))}
+        </div>
         </div>
       </div>
       {error ? <p className="candle-chart__error">{error}</p> : null}
@@ -2920,8 +3044,9 @@ export function CandleChart({
         ) : null}
         {backtestOpen ? (
           <BacktestModal
-            pair={pair}
+            candles={loadedCandles}
             timeframe={timeframe}
+            onTimeframeChange={onTimeframeChange}
             laNweSettings={la_nweSettings}
             rewardRatio={rewardRatio}
             onRewardRatioChange={onRewardRatioChange}

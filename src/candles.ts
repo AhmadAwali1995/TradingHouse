@@ -50,14 +50,19 @@ const BINANCE_INTERVAL: Record<TimeframeId, string> = {
   '1w': '1w',
 }
 
-const TARGET_BARS: Record<TimeframeId, number> = {
-  '15m': 4000,
-  '30m': 4000,
-  '45m': 4000,
-  '1h': 4000,
-  '4h': 3000,
-  '1d': 1500,
-  '1w': 400,
+const HISTORY_MONTHS: Record<TimeframeId, number> = {
+  '15m': 2,
+  '30m': 4,
+  '45m': 5,
+  '1h': 6,
+  '4h': 12,
+  '1d': 24,
+  '1w': 60,
+}
+
+export type CandleRange = {
+  from: number
+  to: number
 }
 
 const PAGE_SIZE = 1000
@@ -104,17 +109,24 @@ function parseKlines(klines: BinanceKline[]): Candle[] {
   }))
 }
 
+function monthsBefore(months: number): number {
+  const date = new Date()
+  date.setMonth(date.getMonth() - months)
+  return date.getTime()
+}
+
 async function fetchKlinePages(
   pair: Pair,
   interval: string,
-  targetCount: number,
+  startTimeMs: number,
+  endTimeMs: number | undefined,
   signal?: AbortSignal,
 ): Promise<Candle[]> {
   const candles: Candle[] = []
-  let endTime: number | undefined
+  let endTime = endTimeMs
   const endpoint = getApiLink(pair.api)
 
-  while (candles.length < targetCount) {
+  while (true) {
     const params = new URLSearchParams({
       symbol: pair.symbol,
       interval,
@@ -136,9 +148,10 @@ async function fetchKlinePages(
       break
     }
 
-    candles.unshift(...page)
+    const kept = page.filter((candle) => candle.time * 1000 >= startTimeMs && (endTimeMs === undefined || candle.time * 1000 <= endTimeMs))
+    candles.unshift(...kept)
 
-    if (page.length < PAGE_SIZE) {
+    if (kept.length < page.length || page.length < PAGE_SIZE || page[0].time * 1000 <= startTimeMs) {
       break
     }
 
@@ -150,9 +163,7 @@ async function fetchKlinePages(
     unique.set(candle.time, candle)
   }
 
-  return [...unique.values()]
-    .sort((left, right) => left.time - right.time)
-    .slice(-targetCount)
+  return [...unique.values()].sort((left, right) => left.time - right.time)
 }
 
 export function getBinanceInterval(timeframe: TimeframeId): string {
@@ -208,14 +219,17 @@ export async function fetchCandles(
   pair: Pair,
   timeframe: TimeframeId,
   signal?: AbortSignal,
+  range?: CandleRange,
 ): Promise<Candle[]> {
-  const interval = BINANCE_INTERVAL[timeframe]
-  const target =
-    timeframe === '45m' ? TARGET_BARS[timeframe] * 3 : TARGET_BARS[timeframe]
-  const candles = await fetchKlinePages(pair, interval, target, signal)
+  const startTimeMs = range ? range.from * 1000 : monthsBefore(HISTORY_MONTHS[timeframe])
+  const endTimeMs = range ? range.to * 1000 : undefined
+  const interval = timeframe === '45m' ? '15m' : BINANCE_INTERVAL[timeframe]
+  const candles = await fetchKlinePages(pair, interval, startTimeMs, endTimeMs, signal)
 
   if (timeframe === '45m') {
-    return aggregateCandles(candles, 45 * 60).slice(-TARGET_BARS[timeframe])
+    return aggregateCandles(candles, 45 * 60).filter(
+      (candle) => candle.time * 1000 >= startTimeMs && (endTimeMs === undefined || candle.time * 1000 <= endTimeMs),
+    )
   }
 
   return candles

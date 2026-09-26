@@ -47,23 +47,26 @@ export function Watchlist({
   onOpenIndicatorSettings: (indicator: IndicatorId) => void
 }) {
   const [query, setQuery] = useState('')
+  const [marketTab, setMarketTab] = useState<'crypto' | 'forex'>('crypto')
   const [sideTab, setSideTab] = useState<'indicators' | 'strategies'>('strategies')
   const [tickers, setTickers] = useState<Map<string, PairTicker>>(new Map())
   const [priceMoves, setPriceMoves] = useState<Map<string, 'up' | 'down'>>(new Map())
 
   const visiblePairs = useMemo(() => {
+    const inMarket = pairs.filter((pair) => pair.market === marketTab)
     const normalized = query.trim().toLowerCase()
     if (!normalized) {
-      return pairs
+      return inMarket
     }
 
-    return pairs.filter(
+    return inMarket.filter(
       (pair) =>
         pair.symbol.toLowerCase().includes(normalized) ||
         pair.name.toLowerCase().includes(normalized) ||
-        pair.baseAsset.toLowerCase().includes(normalized),
+        pair.baseAsset.toLowerCase().includes(normalized) ||
+        pair.quoteAsset.toLowerCase().includes(normalized),
     )
-  }, [pairs, query])
+  }, [pairs, query, marketTab])
 
   useEffect(() => {
     let cancelled = false
@@ -144,8 +147,29 @@ export function Watchlist({
         <span className="tv-watchlist__title">Watchlist</span>
       </div>
       <div className="tv-watchlist__section">
-        <div className="tv-watchlist__section-header">
-          <span className="tv-watchlist__section-title">Pairs</span>
+        <div className="tv-watchlist__tabs" role="tablist" aria-label="Markets">
+          <button
+            type="button"
+            role="tab"
+            id="watchlist-tab-crypto"
+            className={marketTab === 'crypto' ? 'tv-watchlist__tab is-active' : 'tv-watchlist__tab'}
+            aria-selected={marketTab === 'crypto'}
+            aria-controls="watchlist-panel-pairs"
+            onClick={() => setMarketTab('crypto')}
+          >
+            Crypto
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="watchlist-tab-forex"
+            className={marketTab === 'forex' ? 'tv-watchlist__tab is-active' : 'tv-watchlist__tab'}
+            aria-selected={marketTab === 'forex'}
+            aria-controls="watchlist-panel-pairs"
+            onClick={() => setMarketTab('forex')}
+          >
+            Forex
+          </button>
         </div>
         <label className="tv-watchlist__search">
           <span className="tv-watchlist__search-icon" aria-hidden="true">
@@ -167,7 +191,12 @@ export function Watchlist({
           <span>Last</span>
           <span>Chg%</span>
         </div>
-        <div className="tv-watchlist__rows" role="listbox" aria-label="Pairs">
+        <div
+          className="tv-watchlist__rows"
+          role="listbox"
+          id="watchlist-panel-pairs"
+          aria-label={marketTab === 'crypto' ? 'Crypto' : 'Forex'}
+        >
           {visiblePairs.length === 0 ? (
             <p className="tv-watchlist__empty">No symbols match</p>
           ) : (

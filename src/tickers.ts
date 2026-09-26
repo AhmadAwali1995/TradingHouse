@@ -95,13 +95,14 @@ export async function fetchPairTickers(
   timeframe: TimeframeId,
   signal?: AbortSignal,
 ): Promise<Map<string, PairTicker>> {
-  if (pairs.length === 0) {
+  const cryptoPairs = pairs.filter((pair) => pair.market === 'crypto')
+  if (cryptoPairs.length === 0) {
     return new Map()
   }
 
   const tickers = new Map<string, PairTicker>()
   const rows = await Promise.all(
-    pairs.map(async (pair) => ({
+    cryptoPairs.map(async (pair) => ({
       pair,
       candle: await fetchCurrentTimeframeCandle(pair, timeframe, signal),
     })),
@@ -139,7 +140,13 @@ export function subscribeLiveTickers(
   pairs: Pair[],
   onTickers: (tickers: Map<string, PairTicker>) => void,
 ): LiveTickerSubscription {
-  const allowed = new Set(pairs.map((pair) => pair.symbol))
+  const allowed = new Set(
+    pairs.filter((pair) => pair.market === 'crypto').map((pair) => pair.symbol),
+  )
+  if (allowed.size === 0) {
+    return { close() {} }
+  }
+
   let socket: WebSocket | null = null
   let closed = false
   let retry: ReturnType<typeof setTimeout> | undefined
