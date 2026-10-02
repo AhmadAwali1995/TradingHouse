@@ -9,8 +9,67 @@
 .topbar {
   height: 40px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
   border-bottom: 1px solid #2a2e39;
   background: #1e222d;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #d1d4dc;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+
+.brand-badge,
+.topbar-avatar {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 2px;
+  background: #2962ff;
+  color: #fff;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.topbar-auth {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #b2b5be;
+  font-size: 13px;
+}
+
+.topbar-auth button {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid #363a45;
+  border-radius: 2px;
+  background: transparent;
+  color: #d1d4dc;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.topbar-auth button:hover {
+  border-color: #787b86;
 }
 
 .workspace {

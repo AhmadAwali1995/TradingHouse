@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { logout } from './auth/api'
+import type { SessionUser } from './auth/session'
 import { CandleChart } from './CandleChart'
 import { Watchlist } from './Watchlist'
 import type { TimeframeId } from './candles'
@@ -7,7 +9,7 @@ import type { IndicatorId, IndicatorVisibility } from './indicatorCatalog'
 import { defaultStrategyVisibility, type RewardRatio, type StrategyId, type StrategyVisibility } from './strategies'
 import './App.css'
 
-function App() {
+function App({ user }: { user: SessionUser }) {
   const [pair, setPair] = useState(DEFAULT_PAIR)
   const [timeframe, setTimeframe] = useState<TimeframeId>('1h')
   const [settingsOpen, setSettingsOpen] = useState<IndicatorId | null>(null)
@@ -37,7 +39,27 @@ function App() {
 
   return (
     <div className="app">
-      <header className="topbar" />
+      <header className="topbar">
+        <a className="brand" href="/">
+          <span className="brand-badge" aria-hidden="true">TH</span>
+          Trading House
+        </a>
+        <div className="topbar-auth">
+          <span className="topbar-user">
+            <span className="topbar-avatar" aria-hidden="true">{user.firstName.slice(0, 1).toUpperCase()}</span>
+            {user.firstName}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              logout()
+              window.location.assign('/login')
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+      </header>
       <main className="workspace">
         <section className="chart">
           <CandleChart
