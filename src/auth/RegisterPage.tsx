@@ -10,6 +10,7 @@ const CODE_LENGTH = 6
 export function RegisterPage() {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
+  const [userName, setUserName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -35,7 +36,7 @@ export function RegisterPage() {
 
   const onRegister = async (event: FormEvent) => {
     event.preventDefault()
-    const nextErrors = validateRegister({ firstName, lastName, email, password, confirmPassword })
+    const nextErrors = validateRegister({ firstName, lastName, userName, email, password, confirmPassword })
     setErrors(nextErrors)
     setFormError('')
     if (Object.keys(nextErrors).length > 0) return
@@ -45,6 +46,7 @@ export function RegisterPage() {
       await register({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        userName: userName.trim(),
         email: email.trim(),
         password,
         confirmPassword,
@@ -138,6 +140,16 @@ export function RegisterPage() {
               {errors.lastName ? <span className="auth-error">{errors.lastName}</span> : null}
             </label>
           </div>
+          <label className={`auth-field${errors.userName ? ' is-invalid' : ''}`}>
+            Username
+            <input
+              value={userName}
+              autoComplete="username"
+              placeholder="your.name"
+              onChange={(event) => setUserName(event.target.value)}
+            />
+            {errors.userName ? <span className="auth-error">{errors.userName}</span> : null}
+          </label>
           <label className={`auth-field${errors.email ? ' is-invalid' : ''}`}>
             Email
             <input

@@ -22,6 +22,7 @@ export type AuthSession = SessionUser & {
 export async function register(body: {
   firstName: string
   lastName: string
+  userName: string
   email: string
   password: string
   confirmPassword: string
@@ -38,10 +39,10 @@ export async function verifyRegister(email: string, code: string): Promise<AuthS
   return session
 }
 
-export async function login(email: string, password: string): Promise<AuthSession> {
+export async function login(emailOrUserName: string, password: string): Promise<AuthSession> {
   const session = await request<AuthSession>(`${API_BASE_URL}/api/auth/login`, {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ emailOrUserName, password }),
   })
   setToken(session.accessToken)
   return session

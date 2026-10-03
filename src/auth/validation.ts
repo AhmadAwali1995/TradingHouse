@@ -1,10 +1,12 @@
 export type FieldErrors = Record<string, string>
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const userNamePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{2,31}$/
 
 export function validateRegister(values: {
   firstName: string
   lastName: string
+  userName: string
   email: string
   password: string
   confirmPassword: string
@@ -14,6 +16,10 @@ export function validateRegister(values: {
   else if (values.firstName.trim().length > 50) errors.firstName = 'First name must be 50 characters or less.'
   if (!values.lastName.trim()) errors.lastName = 'Last name is required.'
   else if (values.lastName.trim().length > 50) errors.lastName = 'Last name must be 50 characters or less.'
+  if (!values.userName.trim()) errors.userName = 'Username is required.'
+  else if (!userNamePattern.test(values.userName.trim())) {
+    errors.userName = 'Use 3–32 letters, digits, or . _ - and start with a letter or digit.'
+  }
   if (!values.email.trim()) errors.email = 'Email is required.'
   else if (!emailPattern.test(values.email.trim())) errors.email = 'Enter a valid email.'
   const passwordError = passwordMessage(values.password)
@@ -22,10 +28,10 @@ export function validateRegister(values: {
   return errors
 }
 
-export function validateLogin(values: { email: string; password: string }): FieldErrors {
+export function validateLogin(values: { emailOrUserName: string; password: string }): FieldErrors {
   const errors: FieldErrors = {}
-  if (!values.email.trim()) errors.email = 'Email is required.'
-  else if (!emailPattern.test(values.email.trim())) errors.email = 'Enter a valid email.'
+  if (!values.emailOrUserName.trim()) errors.emailOrUserName = 'Email or username is required.'
+  else if (values.emailOrUserName.trim().length > 256) errors.emailOrUserName = 'Email or username must be 256 characters or less.'
   if (!values.password) errors.password = 'Password is required.'
   return errors
 }

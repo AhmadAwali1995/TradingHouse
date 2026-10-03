@@ -6,7 +6,7 @@ import { validateLogin } from './validation'
 import './Auth.css'
 
 export function LoginPage() {
-  const [email, setEmail] = useState('')
+  const [emailOrUserName, setEmailOrUserName] = useState('')
   const [password, setPassword] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState('')
@@ -14,14 +14,14 @@ export function LoginPage() {
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault()
-    const nextErrors = validateLogin({ email, password })
+    const nextErrors = validateLogin({ emailOrUserName, password })
     setErrors(nextErrors)
     setFormError('')
     if (Object.keys(nextErrors).length > 0) return
 
     setPending(true)
     try {
-      await login(email.trim(), password)
+      await login(emailOrUserName.trim(), password)
       window.location.assign('/')
     } catch (error) {
       if (error instanceof ApiError) {
@@ -46,16 +46,15 @@ export function LoginPage() {
       }
     >
       <form className="auth-form" onSubmit={onSubmit} noValidate>
-        <label className={`auth-field${errors.email ? ' is-invalid' : ''}`}>
-          Email
+        <label className={`auth-field${errors.emailOrUserName ? ' is-invalid' : ''}`}>
+          Email or username
           <input
-            type="email"
-            value={email}
-            autoComplete="email"
-            placeholder="name@email.com"
-            onChange={(event) => setEmail(event.target.value)}
+            value={emailOrUserName}
+            autoComplete="username"
+            placeholder="name@email.com or username"
+            onChange={(event) => setEmailOrUserName(event.target.value)}
           />
-          {errors.email ? <span className="auth-error">{errors.email}</span> : null}
+          {errors.emailOrUserName ? <span className="auth-error">{errors.emailOrUserName}</span> : null}
         </label>
         <PasswordField
           label="Password"
