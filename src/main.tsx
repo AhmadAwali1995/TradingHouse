@@ -32,6 +32,7 @@ function Root() {
   if (user === undefined || (!user && !isAuthPage) || (user && isAuthPage)) return null
   if (path === '/login') return <LoginPage />
   if (path === '/register') return <RegisterPage />
+  if (!user) return null
   return <App user={user} />
 }
 
