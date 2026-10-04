@@ -1,0 +1,148 @@
+.watch-page {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+}
+
+.watch-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.watch-heading h1 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.watch-heading p,
+.watch-empty {
+  margin: 0;
+  color: #787b86;
+  font-size: 13px;
+}
+
+.watch-heading p.up {
+  color: #089981;
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-heading p.down {
+  color: #f23645;
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-back {
+  display: inline-block;
+  margin-bottom: 8px;
+  color: #787b86;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.watch-back:hover {
+  color: #d1d4dc;
+}
+
+.watch-connection {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 2px;
+  background: #2a2e39;
+  color: #f7a31a;
+  font-size: 12px;
+}
+
+.watch-connection.live {
+  color: #089981;
+}
+
+.watch-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-table th {
+  padding: 8px 12px;
+  border-bottom: 1px solid #2a2e39;
+  color: #787b86;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.watch-table th:first-child,
+.watch-table td:first-child {
+  text-align: left;
+}
+
+.watch-table td {
+  padding: 12px;
+  border-bottom: 1px solid #2a2e39;
+  text-align: right;
+  vertical-align: top;
+}
+
+.watch-row {
+  cursor: pointer;
+}
+
+.watch-row:hover td,
+.watch-row:focus td {
+  background: #1e222d;
+}
+
+.watch-table td a {
+  display: block;
+  color: inherit;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.watch-flag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 2px;
+  background: #2962ff;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.watch-detail {
+  display: block;
+  margin-top: 4px;
+  color: #787b86;
+  font-size: 12px;
+}
+
+.watch-table .up {
+  color: #089981;
+}
+
+.watch-table .down {
+  color: #f23645;
+}
+
+.watch-state.live {
+  color: #089981;
+}
+
+.watch-state.failed {
+  color: #f23645;
+}
+
+.watch-state.starting,
+.watch-state.skipped {
+  color: #f7a31a;
+}

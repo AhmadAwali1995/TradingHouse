@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { logout } from './auth/api'
 import type { SessionUser } from './auth/session'
 import { CandleChart } from './CandleChart'
+import { Topbar } from './Topbar'
 import { Watchlist } from './Watchlist'
 import type { TimeframeId } from './candles'
 import { DEFAULT_PAIR, PAIRS } from './data/config'
@@ -39,27 +39,7 @@ function App({ user }: { user: SessionUser }) {
 
   return (
     <div className="app">
-      <header className="topbar">
-        <a className="brand" href="/">
-          <span className="brand-badge" aria-hidden="true">TH</span>
-          Trading House
-        </a>
-        <div className="topbar-auth">
-          <span className="topbar-user">
-            <span className="topbar-avatar" aria-hidden="true">{user.firstName.slice(0, 1).toUpperCase()}</span>
-            {user.firstName}
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              logout()
-              window.location.assign('/login')
-            }}
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
+      <Topbar user={user} />
       <main className="workspace">
         <section className="chart">
           <CandleChart

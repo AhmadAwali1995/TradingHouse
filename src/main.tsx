@@ -6,10 +6,12 @@ import App from './App.tsx'
 import { currentUser } from './auth/api'
 import { LoginPage } from './auth/LoginPage.tsx'
 import { RegisterPage } from './auth/RegisterPage.tsx'
+import { MarketWatchPage } from './MarketWatchPage.tsx'
+import { PairPricesPage } from './PairPricesPage.tsx'
 import type { SessionUser } from './auth/session'
 
 function Root() {
-  const path = window.location.pathname
+  const path = window.location.pathname.replace(/\/$/, '') || '/'
   const isAuthPage = path === '/login' || path === '/register'
   const [user, setUser] = useState<SessionUser | null | undefined>(undefined)
 
@@ -33,6 +35,9 @@ function Root() {
   if (path === '/login') return <LoginPage />
   if (path === '/register') return <RegisterPage />
   if (!user) return null
+  if (path === '/watch') return <MarketWatchPage user={user} />
+  const pairPath = path.match(/^\/watch\/([^/]+)$/)
+  if (pairPath) return <PairPricesPage user={user} symbol={decodeURIComponent(pairPath[1])} />
   return <App user={user} />
 }
 
