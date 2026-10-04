@@ -60,6 +60,7 @@ import {
 import type { IndicatorId, IndicatorVisibility } from './indicatorCatalog'
 import { BacktestModal } from './BacktestModal'
 import { strategyPositions, type RewardRatio, type StrategyId, type StrategyVisibility } from './strategies'
+import { fetchTestOrders, testOrderDrawings, type TestOrder } from './strategies/testOrders'
 import { subscribeLiveCandles } from './klineSocket'
 import { DrawingPrimitive } from './drawings/DrawingPrimitive'
 import { DrawingToolbar } from './drawings/DrawingToolbar'
@@ -1052,6 +1053,7 @@ export function CandleChart({
   timeframe,
   indicatorVisibility,
   strategyVisibility,
+  showTestStrategy,
   rewardRatio,
   onRewardRatioChange,
   backtestStrategy,
@@ -1065,6 +1067,7 @@ export function CandleChart({
   timeframe: TimeframeId
   indicatorVisibility: IndicatorVisibility
   strategyVisibility: StrategyVisibility
+  showTestStrategy: boolean
   rewardRatio: RewardRatio
   onRewardRatioChange: (ratio: RewardRatio) => void
   backtestStrategy: StrategyId | null
@@ -1129,6 +1132,10 @@ export function CandleChart({
   const [draftSmaSettings, setDraftSmaSettings] = useState<SmaSettings>(DEFAULT_SMA_SETTINGS)
   const indicatorVisibilityRef = useRef(indicatorVisibility)
   const strategyVisibilityRef = useRef(strategyVisibility)
+  const showTestStrategyRef = useRef(showTestStrategy)
+  const [testOrders, setTestOrders] = useState<TestOrder[]>([])
+  const testOrdersRef = useRef(testOrders)
+  testOrdersRef.current = testOrders
   const rewardRatioRef = useRef(rewardRatio)
   const la_nweSettingsRef = useRef(la_nweSettings)
   const rsiSettingsRef = useRef(rsiSettings)
@@ -1139,6 +1146,7 @@ export function CandleChart({
   const timeframeRef = useRef(timeframe)
   indicatorVisibilityRef.current = indicatorVisibility
   strategyVisibilityRef.current = strategyVisibility
+  showTestStrategyRef.current = showTestStrategy
   rewardRatioRef.current = rewardRatio
   la_nweSettingsRef.current = la_nweSettings
   rsiSettingsRef.current = rsiSettings
@@ -1740,11 +1748,14 @@ export function CandleChart({
         return
       }
       primitive.setState({
-        drawings: strategyPositions(strategyVisibilityRef.current, {
-          candles,
-          laNweSettings: la_nweSettingsRef.current,
-          rewardRatio: rewardRatioRef.current,
-        }),
+        drawings: [
+          ...strategyPositions(strategyVisibilityRef.current, {
+            candles,
+            laNweSettings: la_nweSettingsRef.current,
+            rewardRatio: rewardRatioRef.current,
+          }),
+          ...(showTestStrategyRef.current ? testOrderDrawings(testOrdersRef.current, candles) : []),
+        ],
       })
     }
 
@@ -1937,13 +1948,38 @@ export function CandleChart({
       return
     }
     primitive.setState({
-      drawings: strategyPositions(strategyVisibility, {
-        candles,
-        laNweSettings: la_nweSettings,
-        rewardRatio,
-      }),
+      drawings: [
+        ...strategyPositions(strategyVisibility, {
+          candles,
+          laNweSettings: la_nweSettings,
+          rewardRatio,
+        }),
+        ...(showTestStrategy ? testOrderDrawings(testOrders, candles) : []),
+      ],
     })
-  }, [strategyVisibility, rewardRatio, la_nweSettings, chartReady, pair, timeframe])
+  }, [strategyVisibility, showTestStrategy, rewardRatio, la_nweSettings, chartReady, pair, timeframe, testOrders])
+
+  useEffect(() => {
+    if (!showTestStrategy || pair.market !== 'crypto') {
+      setTestOrders([])
+      return
+    }
+    let cancelled = false
+    const load = async () => {
+      const orders = await fetchTestOrders(pair.symbol)
+      if (!cancelled) {
+        setTestOrders(orders)
+      }
+    }
+    void load()
+    const timer = window.setInterval(() => {
+      void load()
+    }, 15000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [pair.symbol, pair.market, showTestStrategy])
 
   useEffect(() => {
     const chart = chartRef.current

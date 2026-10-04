@@ -29,6 +29,8 @@ export function Watchlist({
   onSelect,
   onToggleIndicator,
   onToggleStrategy,
+  showTestStrategy,
+  onToggleTestStrategy,
   onRewardRatioChange,
   onOpenBacktest,
   onOpenIndicatorSettings,
@@ -43,6 +45,8 @@ export function Watchlist({
   onSelect: (pair: Pair) => void
   onToggleIndicator: (indicator: IndicatorId) => void
   onToggleStrategy: (strategy: StrategyId) => void
+  showTestStrategy: boolean
+  onToggleTestStrategy: () => void
   onRewardRatioChange: (ratio: RewardRatio) => void
   onOpenBacktest: (strategy: StrategyId) => void
   onOpenIndicatorSettings: (indicator: IndicatorId) => void
@@ -432,6 +436,48 @@ export function Watchlist({
               </div>
             )
           })}
+          <div className="tv-watchlist__strategy-split" role="separator" />
+          <div className="tv-watchlist__indicator-row" role="listitem">
+            <span className="tv-watchlist__indicator-name">Test</span>
+            <div className="tv-watchlist__indicator-actions">
+              <button
+                type="button"
+                className="tv-watchlist__indicator-toggle"
+                aria-label={`${showTestStrategy ? 'Hide' : 'Show'} Test`}
+                aria-pressed={showTestStrategy}
+                onClick={onToggleTestStrategy}
+              >
+                {showTestStrategy ? (
+                  <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+                    <path
+                      d="M10 4c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3C17.5 13.9 14.2 17 10 17S2.5 13.9 1.2 11.1a1.5 1.5 0 0 1 0-1.3C2.5 7.1 5.8 4 10 4Z"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                    />
+                    <circle cx="10" cy="10.5" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+                    <path
+                      d="M3.2 3.2 16.8 16.8"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M6.1 6.1A9.3 9.3 0 0 1 10 5c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3a10.5 10.5 0 0 1-3.2 3.7M8.1 15.2A9.5 9.5 0 0 1 10 16c-4.2 0-7.5-3.1-8.8-5.8a1.5 1.5 0 0 1 0-1.3A10.3 10.3 0 0 1 4 5.9"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
         )}
       </div>
