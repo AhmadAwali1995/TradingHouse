@@ -1,5 +1,3 @@
-import { getApiLink, type Pair } from './data/config'
-
 export const TIMEFRAMES = [
   { id: '15m', label: '15m' },
   { id: '30m', label: '30m' },
@@ -31,15 +29,6 @@ export type Candle = {
   volume?: number
 }
 
-type BinanceKline = [
-  number,
-  string,
-  string,
-  string,
-  string,
-  ...unknown[],
-]
-
 const BINANCE_INTERVAL: Record<TimeframeId, string> = {
   '15m': '15m',
   '30m': '30m',
@@ -50,120 +39,9 @@ const BINANCE_INTERVAL: Record<TimeframeId, string> = {
   '1w': '1w',
 }
 
-const HISTORY_MONTHS: Record<TimeframeId, number> = {
-  '15m': 2,
-  '30m': 4,
-  '45m': 5,
-  '1h': 6,
-  '4h': 12,
-  '1d': 24,
-  '1w': 60,
-}
-
 export type CandleRange = {
   from: number
   to: number
-}
-
-const PAGE_SIZE = 1000
-
-function aggregateCandles(
-  candles: Candle[],
-  periodSeconds: number,
-): Candle[] {
-  const buckets = new Map<number, Candle>()
-
-  for (const candle of candles) {
-    const time = Math.floor(candle.time / periodSeconds) * periodSeconds
-    const bucket = buckets.get(time)
-
-    if (!bucket) {
-      buckets.set(time, {
-        time,
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-        volume: candle.volume ?? 0,
-      })
-      continue
-    }
-
-    bucket.high = Math.max(bucket.high, candle.high)
-    bucket.low = Math.min(bucket.low, candle.low)
-    bucket.close = candle.close
-    bucket.volume = (bucket.volume ?? 0) + (candle.volume ?? 0)
-  }
-
-  return [...buckets.values()]
-}
-
-function parseKlines(klines: BinanceKline[]): Candle[] {
-  return klines.map((kline) => ({
-    time: Math.floor(kline[0] / 1000),
-    open: Number(kline[1]),
-    high: Number(kline[2]),
-    low: Number(kline[3]),
-    close: Number(kline[4]),
-    volume: Number(kline[5]),
-  }))
-}
-
-function monthsBefore(months: number): number {
-  const date = new Date()
-  date.setMonth(date.getMonth() - months)
-  return date.getTime()
-}
-
-async function fetchKlinePages(
-  pair: Pair,
-  interval: string,
-  startTimeMs: number,
-  endTimeMs: number | undefined,
-  signal?: AbortSignal,
-): Promise<Candle[]> {
-  const candles: Candle[] = []
-  let endTime = endTimeMs
-  const endpoint = getApiLink(pair.api)
-
-  while (true) {
-    const params = new URLSearchParams({
-      symbol: pair.symbol,
-      interval,
-      limit: String(PAGE_SIZE),
-    })
-
-    if (endTime !== undefined) {
-      params.set('endTime', String(endTime))
-    }
-
-    const response = await fetch(`${endpoint}?${params.toString()}`, { signal })
-
-    if (!response.ok) {
-      throw new Error(`Failed to load ${pair.name} candles (${response.status})`)
-    }
-
-    const page = parseKlines((await response.json()) as BinanceKline[])
-    if (page.length === 0) {
-      break
-    }
-
-    const kept = page.filter((candle) => candle.time * 1000 >= startTimeMs && (endTimeMs === undefined || candle.time * 1000 <= endTimeMs))
-    candles.unshift(...kept)
-
-    if (kept.length < page.length || page.length < PAGE_SIZE || page[0].time * 1000 <= startTimeMs) {
-      break
-    }
-
-    endTime = page[0].time * 1000 - 1
-  }
-
-  const unique = new Map<number, Candle>()
-  for (const candle of candles) {
-    unique.set(candle.time, candle)
-  }
-
-  return [...unique.values()].sort((left, right) => left.time - right.time)
 }
 
 export function getBinanceInterval(timeframe: TimeframeId): string {
@@ -213,24 +91,4 @@ export function mergeIntoBucket(
     close: candle.close,
     volume: (current.volume ?? 0) + (candle.volume ?? 0),
   }
-}
-
-export async function fetchCandles(
-  pair: Pair,
-  timeframe: TimeframeId,
-  signal?: AbortSignal,
-  range?: CandleRange,
-): Promise<Candle[]> {
-  const startTimeMs = range ? range.from * 1000 : monthsBefore(HISTORY_MONTHS[timeframe])
-  const endTimeMs = range ? range.to * 1000 : undefined
-  const interval = timeframe === '45m' ? '15m' : BINANCE_INTERVAL[timeframe]
-  const candles = await fetchKlinePages(pair, interval, startTimeMs, endTimeMs, signal)
-
-  if (timeframe === '45m') {
-    return aggregateCandles(candles, 45 * 60).filter(
-      (candle) => candle.time * 1000 >= startTimeMs && (endTimeMs === undefined || candle.time * 1000 <= endTimeMs),
-    )
-  }
-
-  return candles
 }
