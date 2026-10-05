@@ -1965,7 +1965,7 @@ export function CandleChart({
       }
       const local = localPoint(event)
       press = local
-      const hit = strategyPrimitiveRef.current?.hitTest(local.x, local.y)
+      const hit = strategyPrimitiveRef.current?.hitDrawing(local.x, local.y)
       if (!hit) {
         return
       }
@@ -1984,7 +1984,7 @@ export function CandleChart({
       if (start && Math.hypot(local.x - start.x, local.y - start.y) > 5) {
         return
       }
-      const hit = strategyPrimitiveRef.current?.hitTest(local.x, local.y)
+      const hit = strategyPrimitiveRef.current?.hitDrawing(local.x, local.y)
       if (!hit) {
         strategyPrimitiveRef.current?.setState({ selectedId: null })
       }

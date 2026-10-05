@@ -4,6 +4,7 @@ import type {
   IPrimitivePaneView,
   ISeriesApi,
   ISeriesPrimitive,
+  PrimitiveHoveredItem,
   SeriesAttachedParameter,
   SeriesType,
   Time,
@@ -708,12 +709,20 @@ export class DrawingPrimitive implements ISeriesPrimitive {
     this.requestUpdate?.()
   }
 
-  hitTest(x: number, y: number): DrawingHit | null {
+  hitDrawing(x: number, y: number): DrawingHit | null {
     const convert = this.converter()
     if (!convert) {
       return null
     }
     return hitTestDrawing(this.state.drawings, convert, x, y, this.state.selectedId)
+  }
+
+  hitTest(x: number, y: number): PrimitiveHoveredItem | null {
+    const hit = this.hitDrawing(x, y)
+    if (!hit) {
+      return null
+    }
+    return { externalId: hit.id, zOrder: 'top' }
   }
 
   converter(): Converter | null {
