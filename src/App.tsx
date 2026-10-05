@@ -26,7 +26,6 @@ function App({ user }: { user: SessionUser }) {
     useState<StrategyVisibility>(defaultStrategyVisibility)
   const [rewardRatio, setRewardRatio] = useState<RewardRatio>(2)
   const [backtestStrategy, setBacktestStrategy] = useState<StrategyId | null>(null)
-  const [showTestStrategy, setShowTestStrategy] = useState(false)
 
   const openIndicatorSettings = (indicator: IndicatorId) => {
     if (settingsOpen === indicator) {
@@ -48,7 +47,6 @@ function App({ user }: { user: SessionUser }) {
             timeframe={timeframe}
             indicatorVisibility={indicatorVisibility}
             strategyVisibility={strategyVisibility}
-            showTestStrategy={showTestStrategy}
             rewardRatio={rewardRatio}
             onRewardRatioChange={setRewardRatio}
             backtestStrategy={backtestStrategy}
@@ -81,8 +79,6 @@ function App({ user }: { user: SessionUser }) {
                 [strategy]: !current[strategy],
               }))
             }
-            showTestStrategy={showTestStrategy}
-            onToggleTestStrategy={() => setShowTestStrategy((current) => !current)}
             onRewardRatioChange={setRewardRatio}
             onOpenBacktest={setBacktestStrategy}
             onOpenIndicatorSettings={openIndicatorSettings}
