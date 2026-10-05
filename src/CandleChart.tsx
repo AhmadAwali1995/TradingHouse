@@ -20,6 +20,7 @@ import {
 import {
   TIMEFRAMES,
   applyLiveCandle,
+  fetchCandles,
   type Candle,
   type CandleRange,
   type TimeframeId,
@@ -60,7 +61,7 @@ import type { IndicatorId, IndicatorVisibility } from './indicatorCatalog'
 import { BacktestModal } from './BacktestModal'
 import { strategyPositions, type RewardRatio, type StrategyId, type StrategyVisibility } from './strategies'
 import { fetchTestOrders, testOrderDrawings, type TestOrder } from './strategies/testOrders'
-import { subscribeChartCandles } from './chartSocket'
+import { subscribeLiveCandles } from './klineSocket'
 import { DrawingPrimitive } from './drawings/DrawingPrimitive'
 import { DrawingToolbar } from './drawings/DrawingToolbar'
 import { DrawingStyleBar } from './drawings/DrawingStyleBar'
@@ -1625,9 +1626,9 @@ export function CandleChart({
       return
     }
 
+    const controller = new AbortController()
     let closed = false
-    let live: { close: () => void } | null = null
-    let fitted = false
+    let live: ReturnType<typeof subscribeLiveCandles> | null = null
     initialRangeRef.current = null
     setError(null)
     setLoading(true)
@@ -1825,63 +1826,70 @@ export function CandleChart({
       setError('Forex prices are not connected yet.')
       return () => {
         closed = true
+        controller.abort()
       }
     }
 
-    const candles: Candle[] = []
-    live = subscribeChartCandles(
-      pair.symbol,
-      timeframe,
-      chartRange ?? undefined,
-      (history) => {
-        if (closed || seriesRef.current !== series) {
+    void fetchCandles(pair, timeframe, controller.signal, chartRange ?? undefined)
+      .then((history) => {
+        if (closed || controller.signal.aborted || seriesRef.current !== series) {
           return
         }
 
-        candles.splice(0, candles.length, ...history)
+        const candles = [...history]
         candlesRef.current = candles
-        setLoadedCandles([...candles])
+        setLoadedCandles(candles)
         paintHistory(candles)
         setHoverCandle(candles.at(-1) ?? null)
-        setError(null)
         setLoading(false)
-        if (!fitted) {
-          fitted = true
-          chartRef.current?.timeScale().fitContent()
-          if (chartRef.current) {
-            centerLastCandle(chartRef.current, candles.length, (range) => {
-              initialRangeRef.current = range
-            })
-          }
+        chartRef.current?.timeScale().fitContent()
+        if (chartRef.current) {
+          centerLastCandle(chartRef.current, candles.length, (range) => {
+            initialRangeRef.current = range
+          })
         }
-      },
-      (candle) => {
-        if (closed || seriesRef.current !== series) {
+
+        live = subscribeLiveCandles(
+          pair,
+          timeframe,
+          (candle) => {
+            if (controller.signal.aborted || seriesRef.current !== series) {
+              return
+            }
+            if (chartRange && candle.time > chartRange.to) {
+              return
+            }
+            const count = candles.length
+            if (applyLiveCandle(candles, candle)) {
+              candlesRef.current = candles
+              if (candles.length !== count) {
+                setLoadedCandles([...candles])
+              }
+              paintLive(candles, candle)
+            }
+          },
+          candles.at(-1),
+        )
+
+        if (closed) {
+          live.close()
+        }
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) {
           return
         }
-        if (chartRange && candle.time > chartRange.to) {
+        if (reason instanceof DOMException && reason.name === 'AbortError') {
           return
         }
-        const count = candles.length
-        if (applyLiveCandle(candles, candle)) {
-          candlesRef.current = candles
-          if (candles.length !== count) {
-            setLoadedCandles([...candles])
-          }
-          paintLive(candles, candle)
-        }
-      },
-      (message) => {
-        if (closed || seriesRef.current !== series) {
-          return
-        }
+        const message = reason instanceof Error ? reason.message : `Failed to load ${pair.name} candles`
         setError(message)
         setLoading(false)
-      },
-    )
+      })
 
     return () => {
       closed = true
+      controller.abort()
       live?.close()
       candlesRef.current = []
     }
