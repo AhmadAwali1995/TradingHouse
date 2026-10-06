@@ -6,6 +6,7 @@ import App from './App.tsx'
 import { currentUser } from './auth/api'
 import { LoginPage } from './auth/LoginPage.tsx'
 import { RegisterPage } from './auth/RegisterPage.tsx'
+import { BacktestPage } from './BacktestPage.tsx'
 import { MarketWatchPage } from './MarketWatchPage.tsx'
 import { PairPricesPage } from './PairPricesPage.tsx'
 import type { SessionUser } from './auth/session'
@@ -13,6 +14,7 @@ import type { SessionUser } from './auth/session'
 function Root() {
   const path = window.location.pathname.replace(/\/$/, '') || '/'
   const isAuthPage = path === '/login' || path === '/register'
+  const isPublicPage = path === '/backtest'
   const [user, setUser] = useState<SessionUser | null | undefined>(undefined)
 
   useEffect(() => {
@@ -27,10 +29,11 @@ function Root() {
 
   useEffect(() => {
     if (user === undefined) return
-    if (!user && !isAuthPage) window.location.replace('/login')
+    if (!user && !isAuthPage && !isPublicPage) window.location.replace('/login')
     if (user && isAuthPage) window.location.replace('/')
-  }, [user, isAuthPage])
+  }, [user, isAuthPage, isPublicPage])
 
+  if (path === '/backtest') return <BacktestPage user={user ?? null} />
   if (user === undefined || (!user && !isAuthPage) || (user && isAuthPage)) return null
   if (path === '/login') return <LoginPage />
   if (path === '/register') return <RegisterPage />

@@ -1,0 +1,97 @@
+.backtest-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.backtest-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-bottom: 1px solid #2a2e39;
+  background: #1e222d;
+}
+
+.backtest-symbols,
+.backtest-controls,
+.backtest-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.backtest-meta {
+  margin-left: auto;
+  color: #787b86;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.backtest-bar button,
+.backtest-controls input {
+  height: 28px;
+  border: 0;
+  border-radius: 2px;
+  background: #2a2e39;
+  color: #d1d4dc;
+  font: inherit;
+  font-size: 12px;
+}
+
+.backtest-bar button {
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.backtest-bar button.active {
+  background: #2962ff;
+  color: #fff;
+}
+
+.backtest-bar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.backtest-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #787b86;
+  font-size: 12px;
+}
+
+.backtest-controls input {
+  width: 88px;
+  padding: 0 8px;
+}
+
+.backtest-connection {
+  padding: 4px 8px;
+  border-radius: 2px;
+  background: #2a2e39;
+  color: #f7a31a;
+}
+
+.backtest-connection.live {
+  color: #089981;
+}
+
+.backtest-note {
+  margin: 0;
+  padding: 8px 12px;
+  color: #787b86;
+  font-size: 13px;
+}
+
+.backtest-note.error {
+  color: #f23645;
+}
+
+.backtest-chart {
+  flex: 1;
+  min-height: 0;
+}
