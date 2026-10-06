@@ -9,7 +9,7 @@ import type { RewardRatio, StrategyId } from '../strategies'
 export type BacktestTrade = {
   time: number
   exitTime: number | null
-  side: 'long' | 'short'
+  side: 'long'
   result: 'target' | 'stop' | 'signal' | 'open'
   profit: number
 }
@@ -18,7 +18,6 @@ export type BacktestResult = {
   positions: number
   openPositions: number
   longs: number
-  shorts: number
   wins: number
   losses: number
   winRate: number
@@ -65,10 +64,10 @@ export function runLuxAlgoBacktest(input: {
   const trades: BacktestTrade[] = []
 
   for (const drawing of drawings) {
-    if (drawing.startTime < input.from || drawing.startTime > input.to) {
+    if (drawing.type !== 'longPosition' || drawing.startTime < input.from || drawing.startTime > input.to) {
       continue
     }
-    const side = drawing.type === 'longPosition' ? 'long' : 'short'
+    const side = 'long' as const
     const trigger = positionTrigger(drawing, history)
     let profit = 0
     let result: BacktestTrade['result'] = 'open'
@@ -88,7 +87,7 @@ export function runLuxAlgoBacktest(input: {
       const exitCandle = history.find((candle) => candle.time === drawing.endTime)
       const riskDist = Math.abs(drawing.entryPrice - drawing.stopPrice)
       if (exitCandle && riskDist > 0) {
-        const move = side === 'long' ? exitCandle.close - drawing.entryPrice : drawing.entryPrice - exitCandle.close
+        const move = exitCandle.close - drawing.entryPrice
         profit = (riskMoney / riskDist) * move
         result = 'signal'
         exitTime = drawing.endTime
@@ -104,14 +103,9 @@ export function runLuxAlgoBacktest(input: {
   let wins = 0
   let losses = 0
   let longs = 0
-  let shorts = 0
   let profit = 0
   for (const trade of trades) {
-    if (trade.side === 'long') {
-      longs += 1
-    } else {
-      shorts += 1
-    }
+    longs += 1
     if (trade.result === 'target' || (trade.result === 'signal' && trade.profit > 0)) {
       wins += 1
       grossProfit += trade.profit
@@ -147,7 +141,6 @@ export function runLuxAlgoBacktest(input: {
     positions: trades.length,
     openPositions: trades.filter((trade) => trade.result === 'open').length,
     longs,
-    shorts,
     wins,
     losses,
     winRate: closedCount > 0 ? (wins / closedCount) * 100 : 0,

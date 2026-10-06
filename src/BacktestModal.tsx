@@ -313,10 +313,8 @@ export function BacktestModal({
                 </dd>
               </div>
               <div>
-                <dt>Longs / shorts</dt>
-                <dd>
-                  {result.longs} / {result.shorts}
-                </dd>
+                <dt>Longs</dt>
+                <dd>{result.longs}</dd>
               </div>
               <div>
                 <dt>Profit factor</dt>
@@ -356,7 +354,7 @@ export function BacktestModal({
                     result.trades.map((trade) => (
                       <tr key={`${trade.time}-${trade.side}`}>
                         <td>{formatWhen(trade.time)}</td>
-                        <td>{trade.side === 'long' ? 'Long' : 'Short'}</td>
+                        <td>Long</td>
                         <td>
                           {trade.result === 'target'
                             ? 'Target'
