@@ -69,6 +69,7 @@ import { useChartDrawings } from './drawings/useChartDrawings'
 import { LastPriceCountdownPrimitive } from './lastPriceCountdown'
 import { formatLastPrice } from './tickers'
 import { LaNweSignalMarkersPrimitive } from './la_nweSignalMarkers'
+import { formatUtcTick, formatUtcTime } from './utcChartTime'
 import './CandleChart.css'
 
 type LogicalRange = {
@@ -1288,11 +1289,15 @@ export function CandleChart({
       rightPriceScale: {
         borderColor: '#2a2e39',
       },
+      localization: {
+        timeFormatter: formatUtcTime,
+      },
       timeScale: {
         borderColor: '#2a2e39',
         timeVisible: true,
         secondsVisible: false,
         minBarSpacing: 2,
+        tickMarkFormatter: formatUtcTick,
       },
       crosshair: {
         mode: CrosshairMode.Normal,

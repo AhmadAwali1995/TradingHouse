@@ -31,12 +31,14 @@ function formatMoney(value: number): string {
 }
 
 function formatWhen(time: number): string {
-  return new Date(time * 1000).toLocaleString(undefined, {
+  return new Date(time * 1000).toLocaleString('en-GB', {
+    timeZone: 'Etc/GMT-3',
     month: 'short',
     day: 'numeric',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    hourCycle: 'h23',
   })
 }
 

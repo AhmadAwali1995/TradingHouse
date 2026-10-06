@@ -20,6 +20,7 @@ import {
   type BacktestSymbol,
 } from './backtestSocket'
 import { Topbar } from './Topbar'
+import { formatUtcTick, formatUtcTime } from './utcChartTime'
 import './App.css'
 import './BacktestPage.css'
 
@@ -72,6 +73,9 @@ export function BacktestPage({ user = null }: { user?: SessionUser | null }) {
         horzLines: { color: '#1e222d' },
       },
       rightPriceScale: { borderColor: '#2a2e39' },
+      localization: {
+        timeFormatter: formatUtcTime,
+      },
       timeScale: {
         borderColor: '#2a2e39',
         timeVisible: true,
@@ -80,6 +84,7 @@ export function BacktestPage({ user = null }: { user?: SessionUser | null }) {
         minBarSpacing: 4,
         rightOffset: 8,
         shiftVisibleRangeOnNewBar: false,
+        tickMarkFormatter: formatUtcTick,
       },
       crosshair: {
         mode: CrosshairMode.Normal,
