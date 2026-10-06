@@ -36,7 +36,7 @@ export const luxAlgoStrategy = {
   id: LUX_ALGO_ID,
   label: 'Lux Algo',
   positions(context: StrategyContext): PositionDrawing[] {
-    const result = calculateLaNwe(context.candles, context.laNweSettings)
+    const result = calculateLaNwe(context.candles, { ...context.laNweSettings, repaint: false })
     const candlesByTime = new Map(context.candles.map((candle) => [candle.time, candle]))
     const bar = barSeconds(context.candles)
     const lastTime = context.candles.at(-1)?.time ?? 0
