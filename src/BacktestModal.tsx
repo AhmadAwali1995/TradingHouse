@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { TIMEFRAMES, type Candle, type TimeframeId } from './candles'
-import type { LaNweSettings } from './indicators'
 import { runLuxAlgoBacktest, type BacktestResult } from './backtest/runBacktest'
 import { STRATEGY_ITEMS, type RewardRatio, type StrategyId } from './strategies'
 import './BacktestModal.css'
@@ -86,7 +85,6 @@ export function BacktestModal({
   candles,
   timeframe,
   onTimeframeChange,
-  laNweSettings,
   rewardRatio,
   onRewardRatioChange,
   strategyId,
@@ -95,7 +93,6 @@ export function BacktestModal({
   candles: Candle[]
   timeframe: TimeframeId
   onTimeframeChange: (timeframe: TimeframeId) => void
-  laNweSettings: LaNweSettings
   rewardRatio: RewardRatio
   onRewardRatioChange: (ratio: RewardRatio) => void
   strategyId: StrategyId
@@ -186,7 +183,6 @@ export function BacktestModal({
     setResult(
       runLuxAlgoBacktest({
         candles,
-        laNweSettings,
         rewardRatio,
         from: fromTime,
         to: toTime,

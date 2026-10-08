@@ -9,7 +9,7 @@ import './App.css'
 
 function App() {
   const [pair, setPair] = useState(DEFAULT_PAIR)
-  const [timeframe, setTimeframe] = useState<TimeframeId>('1h')
+  const [timeframe, setTimeframe] = useState<TimeframeId>('15m')
   const [settingsOpen, setSettingsOpen] = useState<IndicatorId | null>(null)
   const [settingsTick, setSettingsTick] = useState(0)
   const [indicatorVisibility, setIndicatorVisibility] = useState<IndicatorVisibility>({

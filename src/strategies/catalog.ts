@@ -1,7 +1,6 @@
-import { luxAlgoStrategy } from './luxAlgo'
-import { luxAlgoEnhStrategy } from './luxAlgoEnh'
+import { betterRsiStrategy } from './betterRsi'
 
-export const STRATEGIES = [luxAlgoStrategy, luxAlgoEnhStrategy] as const
+export const STRATEGIES = [betterRsiStrategy] as const
 
 export const STRATEGY_ITEMS = STRATEGIES.map((strategy) => ({
   id: strategy.id,

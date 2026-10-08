@@ -1742,7 +1742,6 @@ export function CandleChart({
       primitive.setState({
         drawings: strategyPositions(strategyVisibilityRef.current, {
           candles,
-          laNweSettings: la_nweSettingsRef.current,
           rewardRatio: rewardRatioRef.current,
         }),
       })
@@ -1939,11 +1938,10 @@ export function CandleChart({
     primitive.setState({
       drawings: strategyPositions(strategyVisibility, {
         candles,
-        laNweSettings: la_nweSettings,
         rewardRatio,
       }),
     })
-  }, [strategyVisibility, rewardRatio, la_nweSettings, chartReady, pair, timeframe])
+  }, [strategyVisibility, rewardRatio, chartReady, pair, timeframe])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -3048,7 +3046,6 @@ export function CandleChart({
             candles={loadedCandles}
             timeframe={timeframe}
             onTimeframeChange={onTimeframeChange}
-            laNweSettings={la_nweSettings}
             rewardRatio={rewardRatio}
             onRewardRatioChange={onRewardRatioChange}
             strategyId={backtestStrategy}
