@@ -1,6 +1,7 @@
 import { getApiLink, type Pair } from './data/config'
 
 export const TIMEFRAMES = [
+  { id: '5m', label: '5m' },
   { id: '15m', label: '15m' },
   { id: '30m', label: '30m' },
   { id: '45m', label: '45m' },
@@ -13,6 +14,7 @@ export const TIMEFRAMES = [
 export type TimeframeId = (typeof TIMEFRAMES)[number]['id']
 
 export const TIMEFRAME_SECONDS: Record<TimeframeId, number> = {
+  '5m': 5 * 60,
   '15m': 15 * 60,
   '30m': 30 * 60,
   '45m': 45 * 60,
@@ -41,6 +43,7 @@ type BinanceKline = [
 ]
 
 const BINANCE_INTERVAL: Record<TimeframeId, string> = {
+  '5m': '5m',
   '15m': '15m',
   '30m': '30m',
   '45m': '15m',
@@ -51,6 +54,7 @@ const BINANCE_INTERVAL: Record<TimeframeId, string> = {
 }
 
 const HISTORY_MONTHS: Record<TimeframeId, number> = {
+  '5m': 1,
   '15m': 2,
   '30m': 4,
   '45m': 5,

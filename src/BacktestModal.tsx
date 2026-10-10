@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { TIMEFRAMES, type Candle, type TimeframeId } from './candles'
 import type { LaNweSettings } from './indicators'
 import { runLuxAlgoBacktest, type BacktestResult } from './backtest/runBacktest'
-import { REWARD_RATIOS, STRATEGY_ITEMS, type RewardRatio, type StrategyId } from './strategies'
+import { REWARD_RATIOS, STRATEGY_ITEMS, type RewardRatio, type StrategyEntrySettings, type StrategyId } from './strategies'
 import './BacktestModal.css'
 
 function dateInputValue(date: Date): string {
@@ -89,6 +89,7 @@ export function BacktestModal({
   rewardRatio,
   onRewardRatioChange,
   laNweSettings,
+  entries,
   strategyId,
   onClose,
 }: {
@@ -98,6 +99,7 @@ export function BacktestModal({
   rewardRatio: RewardRatio
   onRewardRatioChange: (ratio: RewardRatio) => void
   laNweSettings: LaNweSettings
+  entries: StrategyEntrySettings
   strategyId: StrategyId
   onClose: () => void
 }) {
@@ -192,6 +194,7 @@ export function BacktestModal({
         amount: invested,
         strategyId,
         laNweSettings,
+        entries,
       }),
     )
   }

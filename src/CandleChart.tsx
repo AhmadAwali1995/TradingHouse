@@ -59,7 +59,7 @@ import {
 } from './indicators'
 import type { IndicatorId, IndicatorVisibility } from './indicatorCatalog'
 import { BacktestModal } from './BacktestModal'
-import { strategyPositions, type RewardRatio, type StrategyId, type StrategyVisibility } from './strategies'
+import { strategyPositions, type RewardRatio, type StrategyEntrySettings, type StrategyId, type StrategyVisibility } from './strategies'
 import { subscribeLiveCandles } from './klineSocket'
 import { DrawingPrimitive } from './drawings/DrawingPrimitive'
 import { DrawingToolbar } from './drawings/DrawingToolbar'
@@ -1054,6 +1054,7 @@ export function CandleChart({
   timeframe,
   indicatorVisibility,
   strategyVisibility,
+  strategyEntries,
   rewardRatio,
   onRewardRatioChange,
   backtestStrategy,
@@ -1067,6 +1068,7 @@ export function CandleChart({
   timeframe: TimeframeId
   indicatorVisibility: IndicatorVisibility
   strategyVisibility: StrategyVisibility
+  strategyEntries: StrategyEntrySettings
   rewardRatio: RewardRatio
   onRewardRatioChange: (ratio: RewardRatio) => void
   backtestStrategy: StrategyId | null
@@ -1133,6 +1135,7 @@ export function CandleChart({
   const [draftSmaSettings, setDraftSmaSettings] = useState<SmaSettings>(DEFAULT_SMA_SETTINGS)
   const indicatorVisibilityRef = useRef(indicatorVisibility)
   const strategyVisibilityRef = useRef(strategyVisibility)
+  const strategyEntriesRef = useRef(strategyEntries)
   const rewardRatioRef = useRef(rewardRatio)
   const la_nweSettingsRef = useRef(la_nweSettings)
   const rsiSettingsRef = useRef(rsiSettings)
@@ -1143,6 +1146,7 @@ export function CandleChart({
   const timeframeRef = useRef(timeframe)
   indicatorVisibilityRef.current = indicatorVisibility
   strategyVisibilityRef.current = strategyVisibility
+  strategyEntriesRef.current = strategyEntries
   rewardRatioRef.current = rewardRatio
   la_nweSettingsRef.current = la_nweSettings
   rsiSettingsRef.current = rsiSettings
@@ -1747,6 +1751,7 @@ export function CandleChart({
         candles,
         rewardRatio: rewardRatioRef.current,
         laNweSettings: la_nweSettingsRef.current,
+        entries: strategyEntriesRef.current,
       })
       strategyDrawingsRef.current = drawings
       primitive.setState({ drawings })
@@ -1945,10 +1950,11 @@ export function CandleChart({
       candles,
       rewardRatio,
       laNweSettings: la_nweSettings,
+      entries: strategyEntries,
     })
     strategyDrawingsRef.current = drawings
     primitive.setState({ drawings })
-  }, [strategyVisibility, rewardRatio, la_nweSettings, chartReady, pair, timeframe])
+  }, [strategyVisibility, strategyEntries, rewardRatio, la_nweSettings, chartReady, pair, timeframe])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -3073,6 +3079,7 @@ export function CandleChart({
             rewardRatio={rewardRatio}
             onRewardRatioChange={onRewardRatioChange}
             laNweSettings={la_nweSettings}
+            entries={strategyEntries}
             strategyId={backtestStrategy}
             onClose={onBacktestClose}
           />

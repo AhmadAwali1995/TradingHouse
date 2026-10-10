@@ -1,6 +1,7 @@
 import type { Candle } from '../candles'
 import type { PositionDrawing } from '../drawings/types'
 import type { LaNweSettings } from '../indicators'
+import type { StrategyEntrySettings } from './entries'
 
 export type RewardRatio = 2 | 2.5 | 3
 
@@ -10,6 +11,7 @@ export type StrategyContext = {
   candles: Candle[]
   rewardRatio: RewardRatio
   laNweSettings: LaNweSettings
+  entries: StrategyEntrySettings
 }
 
 export type StrategyDefinition<Id extends string = string> = {

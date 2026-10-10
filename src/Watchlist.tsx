@@ -6,7 +6,15 @@ import {
   type IndicatorId,
   type IndicatorVisibility,
 } from './indicatorCatalog'
-import { REWARD_RATIOS, STRATEGY_ITEMS, type RewardRatio, type StrategyId, type StrategyVisibility } from './strategies'
+import {
+  REWARD_RATIOS,
+  STRATEGY_ENTRY_OPTIONS,
+  STRATEGY_ITEMS,
+  type RewardRatio,
+  type StrategyEntrySettings,
+  type StrategyId,
+  type StrategyVisibility,
+} from './strategies'
 import {
   fetchPairTickers,
   formatChangePercent,
@@ -22,12 +30,14 @@ export function Watchlist({
   selectedId,
   indicatorVisibility,
   strategyVisibility,
+  strategyEntries,
   rewardRatio,
   settingsOpen,
   onSelect,
   onToggleIndicator,
   onToggleStrategy,
   onRewardRatioChange,
+  onToggleStrategyEntry,
   onOpenBacktest,
   onOpenIndicatorSettings,
 }: {
@@ -36,16 +46,19 @@ export function Watchlist({
   selectedId: string
   indicatorVisibility: IndicatorVisibility
   strategyVisibility: StrategyVisibility
+  strategyEntries: StrategyEntrySettings
   rewardRatio: RewardRatio
   settingsOpen: IndicatorId | null
   onSelect: (pair: Pair) => void
   onToggleIndicator: (indicator: IndicatorId) => void
   onToggleStrategy: (strategy: StrategyId) => void
   onRewardRatioChange: (ratio: RewardRatio) => void
+  onToggleStrategyEntry: (strategy: StrategyId, entry: string) => void
   onOpenBacktest: (strategy: StrategyId) => void
   onOpenIndicatorSettings: (indicator: IndicatorId) => void
 }) {
   const [query, setQuery] = useState('')
+  const [strategySettings, setStrategySettings] = useState<StrategyId | null>(null)
   const [marketTab, setMarketTab] = useState<'crypto' | 'forex'>('crypto')
   const [sideTab, setSideTab] = useState<'indicators' | 'strategies'>('strategies')
   const [tickers, setTickers] = useState<Map<string, PairTicker>>(new Map())
@@ -357,28 +370,37 @@ export function Watchlist({
           {STRATEGY_ITEMS.map((strategy) => {
             const visible = strategyVisibility[strategy.id]
 
+            const settingsVisible = strategySettings === strategy.id
+
             return (
-              <div key={strategy.id} className="tv-watchlist__indicator-row" role="listitem">
+              <div key={strategy.id} role="listitem">
+              <div className="tv-watchlist__indicator-row">
                 <span className="tv-watchlist__indicator-name">{strategy.label}</span>
                 <div className="tv-watchlist__indicator-actions">
-                  <div className="tv-watchlist__ratio" role="radiogroup" aria-label="Reward to risk">
-                      {REWARD_RATIOS.map((ratio) => (
-                        <button
-                          key={ratio}
-                          type="button"
-                          className={
-                            rewardRatio === ratio
-                              ? 'tv-watchlist__ratio-button is-active'
-                              : 'tv-watchlist__ratio-button'
-                          }
-                          role="radio"
-                          aria-checked={rewardRatio === ratio}
-                          onClick={() => onRewardRatioChange(ratio)}
-                        >
-                          1:{ratio}
-                        </button>
-                      ))}
-                    </div>
+                  <button
+                    type="button"
+                    className={
+                      settingsVisible
+                        ? 'tv-watchlist__indicator-toggle is-active'
+                        : 'tv-watchlist__indicator-toggle'
+                    }
+                    aria-label={`${strategy.label} entry settings`}
+                    title={`${strategy.label} entry settings`}
+                    aria-pressed={settingsVisible}
+                    aria-expanded={settingsVisible}
+                    onClick={() => setStrategySettings(settingsVisible ? null : strategy.id)}
+                  >
+                    <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+                      <path
+                        d="M8.2 2.6h3.6l.4 1.7c.4.1.8.3 1.1.6l1.6-.7 1.8 1.8-.7 1.6c.3.3.5.7.6 1.1l1.7.4v3.6l-1.7.4c-.1.4-.3.8-.6 1.1l.7 1.6-1.8 1.8-1.6-.7c-.3.3-.7.5-1.1.6l-.4 1.7H8.2l-.4-1.7c-.4-.1-.8-.3-1.1-.6l-1.6.7-1.8-1.8.7-1.6c-.3-.3-.5-.7-.6-1.1L1.7 11.8V8.2l1.7-.4c.1-.4.3-.8.6-1.1l-.7-1.6 1.8-1.8 1.6.7c.3-.3.7-.5 1.1-.6l.4-1.7Z"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.3"
+                        strokeLinejoin="round"
+                      />
+                      <circle cx="10" cy="10" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.3" />
+                    </svg>
+                  </button>
                   <button
                     type="button"
                     className="tv-watchlist__backtest"
@@ -424,8 +446,67 @@ export function Watchlist({
                   </button>
                 </div>
               </div>
+              </div>
             )
           })}
+          {strategySettings ? (
+            <div
+              className="tv-watchlist__popup-backdrop"
+              onMouseDown={() => setStrategySettings(null)}
+            >
+              <div
+                className="tv-watchlist__popup"
+                role="dialog"
+                aria-modal="true"
+                aria-label={`${STRATEGY_ITEMS.find((item) => item.id === strategySettings)?.label ?? 'Strategy'} settings`}
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <div className="tv-watchlist__popup-header">
+                  <h3>{STRATEGY_ITEMS.find((item) => item.id === strategySettings)?.label}</h3>
+                  <button type="button" className="tv-watchlist__popup-close" onClick={() => setStrategySettings(null)}>
+                    Close
+                  </button>
+                </div>
+                <div className="tv-watchlist__popup-section">
+                  <span>Reward to risk</span>
+                  <div className="tv-watchlist__ratio" role="radiogroup" aria-label="Reward to risk">
+                    {REWARD_RATIOS.map((ratio) => (
+                      <button
+                        key={ratio}
+                        type="button"
+                        className={
+                          rewardRatio === ratio
+                            ? 'tv-watchlist__ratio-button is-active'
+                            : 'tv-watchlist__ratio-button'
+                        }
+                        role="radio"
+                        aria-checked={rewardRatio === ratio}
+                        onClick={() => onRewardRatioChange(ratio)}
+                      >
+                        1:{ratio}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="tv-watchlist__strategy-settings">
+                  {STRATEGY_ENTRY_OPTIONS[strategySettings].map((option) => {
+                    const group = strategyEntries[strategySettings]
+                    const checked = Boolean(group[option.id as keyof typeof group])
+                    return (
+                      <label key={option.id} className="tv-watchlist__strategy-option">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => onToggleStrategyEntry(strategySettings, option.id)}
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
         )}
       </div>

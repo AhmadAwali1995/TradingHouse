@@ -200,6 +200,75 @@
   color: #d1d4dc;
 }
 
+.tv-watchlist__popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.tv-watchlist__popup {
+  width: min(360px, calc(100vw - 32px));
+  padding: 14px;
+  border: 1px solid #2a2e39;
+  border-radius: 8px;
+  background: #1e222d;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.tv-watchlist__popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.tv-watchlist__popup-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tv-watchlist__popup-close {
+  border: 0;
+  background: transparent;
+  color: #868993;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tv-watchlist__popup-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+  color: #b2b5be;
+  font-size: 12px;
+}
+
+.tv-watchlist__strategy-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tv-watchlist__strategy-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #d1d4dc;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.tv-watchlist__strategy-option input {
+  margin-top: 2px;
+}
+
 .tv-watchlist__indicator-actions {
   display: inline-flex;
   align-items: center;

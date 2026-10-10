@@ -69,6 +69,10 @@ export const betterRsiStrategy = {
         placed.endTime = rawEnd - position.startTime < bar ? position.startTime + bar : rawEnd
       }
 
+      if (!context.entries.betterRsi.oversoldTurn) {
+        continue
+      }
+
       if (!waitingForReversal) {
         if (previous >= OVERSOLD && current < OVERSOLD) {
           waitingForReversal = true

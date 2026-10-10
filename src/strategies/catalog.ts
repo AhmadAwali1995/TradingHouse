@@ -1,7 +1,8 @@
 import { betterRsiStrategy } from './betterRsi'
 import { luxAlgoEnhStrategy } from './luxAlgoEnh'
+import { rsiEnhStrategy } from './rsiEnh'
 
-export const STRATEGIES = [betterRsiStrategy, luxAlgoEnhStrategy] as const
+export const STRATEGIES = [betterRsiStrategy, luxAlgoEnhStrategy, rsiEnhStrategy] as const
 
 export const STRATEGY_ITEMS = STRATEGIES.map((strategy) => ({
   id: strategy.id,

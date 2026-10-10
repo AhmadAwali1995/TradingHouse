@@ -4,7 +4,15 @@ import { Watchlist } from './Watchlist'
 import type { TimeframeId } from './candles'
 import { DEFAULT_PAIR, PAIRS } from './data/config'
 import type { IndicatorId, IndicatorVisibility } from './indicatorCatalog'
-import { defaultStrategyVisibility, type RewardRatio, type StrategyId, type StrategyVisibility } from './strategies'
+import {
+  defaultStrategyEntries,
+  defaultStrategyVisibility,
+  toggleStrategyEntry,
+  type RewardRatio,
+  type StrategyEntrySettings,
+  type StrategyId,
+  type StrategyVisibility,
+} from './strategies'
 import './App.css'
 
 function App() {
@@ -22,6 +30,8 @@ function App() {
   })
   const [strategyVisibility, setStrategyVisibility] =
     useState<StrategyVisibility>(defaultStrategyVisibility)
+  const [strategyEntries, setStrategyEntries] =
+    useState<StrategyEntrySettings>(defaultStrategyEntries)
   const [rewardRatio, setRewardRatio] = useState<RewardRatio>(2)
   const [backtestStrategy, setBacktestStrategy] = useState<StrategyId | null>(null)
 
@@ -45,6 +55,7 @@ function App() {
             timeframe={timeframe}
             indicatorVisibility={indicatorVisibility}
             strategyVisibility={strategyVisibility}
+            strategyEntries={strategyEntries}
             rewardRatio={rewardRatio}
             onRewardRatioChange={setRewardRatio}
             backtestStrategy={backtestStrategy}
@@ -62,6 +73,7 @@ function App() {
             selectedId={pair.id}
             indicatorVisibility={indicatorVisibility}
             strategyVisibility={strategyVisibility}
+            strategyEntries={strategyEntries}
             rewardRatio={rewardRatio}
             settingsOpen={settingsOpen}
             onSelect={setPair}
@@ -78,6 +90,9 @@ function App() {
               }))
             }
             onRewardRatioChange={setRewardRatio}
+            onToggleStrategyEntry={(strategy, entry) =>
+              setStrategyEntries((current) => toggleStrategyEntry(current, strategy, entry))
+            }
             onOpenBacktest={setBacktestStrategy}
             onOpenIndicatorSettings={openIndicatorSettings}
           />

@@ -72,6 +72,15 @@
     "api": "binanceKlines"
   },
   {
+    "id": "eur",
+    "name": "Euro",
+    "symbol": "EURUSDT",
+    "baseAsset": "EUR",
+    "quoteAsset": "USDT",
+    "market": "crypto",
+    "api": "binanceKlines"
+  },
+  {
     "id": "eur-usd",
     "name": "Euro",
     "symbol": "EUR/USD",

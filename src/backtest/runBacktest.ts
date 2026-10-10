@@ -3,7 +3,8 @@ import { accountMove, positionExitTime, positionTrigger } from '../drawings/posi
 import type { LaNweSettings } from '../indicators'
 import { betterRsiStrategy } from '../strategies/betterRsi'
 import { luxAlgoEnhStrategy } from '../strategies/luxAlgoEnh'
-import type { RewardRatio, StrategyId } from '../strategies'
+import { rsiEnhStrategy } from '../strategies/rsiEnh'
+import type { RewardRatio, StrategyEntrySettings, StrategyId } from '../strategies'
 
 export type BacktestTrade = {
   time: number
@@ -32,6 +33,7 @@ export type BacktestResult = {
 const STRATEGIES_BY_ID = {
   betterRsi: betterRsiStrategy,
   luxAlgoEnh: luxAlgoEnhStrategy,
+  rsiEnh: rsiEnhStrategy,
 } as const
 
 export function runLuxAlgoBacktest(input: {
@@ -42,12 +44,14 @@ export function runLuxAlgoBacktest(input: {
   amount: number
   strategyId: StrategyId
   laNweSettings: LaNweSettings
+  entries: StrategyEntrySettings
 }): BacktestResult {
   const history = input.candles.filter((candle) => candle.time <= input.to)
   const drawings = STRATEGIES_BY_ID[input.strategyId].positions({
     candles: history,
     rewardRatio: input.rewardRatio,
     laNweSettings: input.laNweSettings,
+    entries: input.entries,
   })
   const trades: BacktestTrade[] = []
 

@@ -49,6 +49,9 @@ export const luxAlgoEnhStrategy = {
         continue
       }
 
+      if (!context.entries.luxAlgoEnh.lowerBand) {
+        continue
+      }
       const candle = candlesByTime.get(cross.time)
       if (!candle) {
         continue
