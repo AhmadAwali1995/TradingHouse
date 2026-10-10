@@ -3,6 +3,26 @@ import type { ChartPoint, PositionDrawing } from './types'
 
 export const DEFAULT_ACCOUNT_SIZE = 1000
 export const DEFAULT_RISK_PERCENT = 1
+export const MAX_RISK_PERCENT = 1.2
+
+export function longRiskPercent(entry: number, stop: number): number | null {
+  if (!(entry > stop) || !(entry > 0)) {
+    return null
+  }
+  return ((entry - stop) / entry) * 100
+}
+
+export function acceptsLongRisk(entry: number, stop: number): boolean {
+  const risk = longRiskPercent(entry, stop)
+  return risk !== null && risk <= MAX_RISK_PERCENT
+}
+
+export function accountMove(amount: number, entry: number, exit: number): number {
+  if (!(entry > 0)) {
+    return 0
+  }
+  return amount * ((exit - entry) / entry)
+}
 
 export type PositionLevels = {
   startTime: number
@@ -54,8 +74,9 @@ function formatPrice(value: number): string {
   })
 }
 
-function formatMoney(value: number): string {
-  return Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function formatSignedMoney(value: number): string {
+  const body = Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return value > 0 ? `+${body}` : value < 0 ? `−${body}` : body
 }
 
 function formatPercent(value: number): string {
@@ -68,6 +89,7 @@ export type PositionBar = {
   open: number
   high: number
   low: number
+  close?: number
 }
 
 export type PositionTrigger = 'target' | 'stop' | null
@@ -119,20 +141,48 @@ export function positionTrigger(drawing: PositionDrawing, bars: PositionBar[]): 
   return null
 }
 
+function realizedExit(
+  drawing: PositionDrawing,
+  bars: PositionBar[],
+  trigger: PositionTrigger,
+): { price: number; kind: 'target' | 'stop' | 'signal' } | null {
+  const naturalExit = positionExitTime(drawing, bars)
+  if (drawing.id.startsWith('strategy-') && naturalExit !== null && drawing.endTime < naturalExit) {
+    const bar = bars.find((item) => item.time === drawing.endTime)
+    if (bar?.close !== undefined) {
+      return { price: bar.close, kind: 'signal' }
+    }
+  }
+  if (trigger === 'target') {
+    return { price: drawing.targetPrice, kind: 'target' }
+  }
+  if (trigger === 'stop') {
+    return { price: drawing.stopPrice, kind: 'stop' }
+  }
+  return null
+}
+
 export function positionStats(drawing: PositionDrawing, bars: PositionBar[]) {
-  const riskDist = Math.abs(drawing.entryPrice - drawing.stopPrice)
-  const rewardDist = Math.abs(drawing.targetPrice - drawing.entryPrice)
-  const riskMoney = drawing.accountSize * (drawing.riskPercent / 100)
-  const qty = riskDist > 0 ? riskMoney / riskDist : 0
-  const profitMoney = qty * rewardDist
-  const lossMoney = qty * riskDist
   const targetPct = drawing.entryPrice === 0 ? 0 : ((drawing.targetPrice - drawing.entryPrice) / drawing.entryPrice) * 100
   const stopPct = drawing.entryPrice === 0 ? 0 : ((drawing.stopPrice - drawing.entryPrice) / drawing.entryPrice) * 100
   const trigger = positionTrigger(drawing, bars)
+  const exit = realizedExit(drawing, bars, trigger)
+  const long = drawing.type === 'longPosition'
+  const profit =
+    exit === null
+      ? null
+      : accountMove(
+          drawing.accountSize,
+          drawing.entryPrice,
+          long ? exit.price : drawing.entryPrice - (exit.price - drawing.entryPrice),
+        )
+  const result = profit === null ? '' : `  P&L: ${formatSignedMoney(profit)}`
+  const showOnTarget = profit !== null && profit >= 0
+  const showOnStop = profit !== null && profit < 0
 
   return {
     trigger,
-    targetLabel: `${trigger === 'target' ? 'Take profit' : 'Target'}: ${formatPrice(drawing.targetPrice)} (${formatPercent(targetPct)})  Amount: ${formatMoney(profitMoney)}`,
-    stopLabel: `${trigger === 'stop' ? 'Stop loss' : 'Stop'}: ${formatPrice(drawing.stopPrice)} (${formatPercent(stopPct)})  Amount: ${formatMoney(lossMoney)}`,
+    targetLabel: `${exit?.kind === 'target' ? 'Take profit' : 'Target'}: ${formatPrice(drawing.targetPrice)} (${formatPercent(targetPct)})${showOnTarget ? result : ''}`,
+    stopLabel: `${exit?.kind === 'stop' ? 'Stop loss' : 'Stop'}: ${formatPrice(drawing.stopPrice)} (${formatPercent(stopPct)})${showOnStop ? result : ''}`,
   }
 }

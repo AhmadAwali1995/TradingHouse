@@ -1,6 +1,8 @@
 import type { Candle } from '../candles'
-import { DEFAULT_RISK_PERCENT, positionExitTime, positionTrigger } from '../drawings/position'
+import { accountMove, positionExitTime, positionTrigger } from '../drawings/position'
+import type { LaNweSettings } from '../indicators'
 import { betterRsiStrategy } from '../strategies/betterRsi'
+import { luxAlgoEnhStrategy } from '../strategies/luxAlgoEnh'
 import type { RewardRatio, StrategyId } from '../strategies'
 
 export type BacktestTrade = {
@@ -29,6 +31,7 @@ export type BacktestResult = {
 
 const STRATEGIES_BY_ID = {
   betterRsi: betterRsiStrategy,
+  luxAlgoEnh: luxAlgoEnhStrategy,
 } as const
 
 export function runLuxAlgoBacktest(input: {
@@ -38,13 +41,14 @@ export function runLuxAlgoBacktest(input: {
   to: number
   amount: number
   strategyId: StrategyId
+  laNweSettings: LaNweSettings
 }): BacktestResult {
   const history = input.candles.filter((candle) => candle.time <= input.to)
   const drawings = STRATEGIES_BY_ID[input.strategyId].positions({
     candles: history,
     rewardRatio: input.rewardRatio,
+    laNweSettings: input.laNweSettings,
   })
-  const riskMoney = input.amount * (DEFAULT_RISK_PERCENT / 100)
   const trades: BacktestTrade[] = []
 
   for (const drawing of drawings) {
@@ -53,16 +57,22 @@ export function runLuxAlgoBacktest(input: {
     }
     const side = 'long' as const
     const trigger = positionTrigger(drawing, history)
+    const naturalExit = positionExitTime(drawing, history)
+    const closedOnSignal = naturalExit === null ? false : drawing.endTime < naturalExit
     let profit = 0
     let result: BacktestTrade['result'] = 'open'
-    let exitTime = positionExitTime(drawing, history)
-    if (trigger === 'target') {
-      const riskDist = Math.abs(drawing.entryPrice - drawing.stopPrice)
-      const rewardDist = Math.abs(drawing.targetPrice - drawing.entryPrice)
-      profit = riskDist > 0 ? riskMoney * (rewardDist / riskDist) : 0
+    let exitTime = naturalExit
+    if (closedOnSignal) {
+      const exitCandle = history.find((candle) => candle.time === drawing.endTime)
+      const exitPrice = exitCandle?.close ?? drawing.entryPrice
+      profit = accountMove(input.amount * (drawing.portion ?? 1), drawing.entryPrice, exitPrice)
+      result = 'signal'
+      exitTime = drawing.endTime
+    } else if (trigger === 'target') {
+      profit = accountMove(input.amount * (drawing.portion ?? 1), drawing.entryPrice, drawing.targetPrice)
       result = 'target'
     } else if (trigger === 'stop') {
-      profit = -riskMoney
+      profit = accountMove(input.amount * (drawing.portion ?? 1), drawing.entryPrice, drawing.stopPrice)
       result = 'stop'
     }
     trades.push({ time: drawing.startTime, exitTime, side, result, profit })

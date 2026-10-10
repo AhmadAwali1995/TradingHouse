@@ -65,6 +65,8 @@ import { DrawingPrimitive } from './drawings/DrawingPrimitive'
 import { DrawingToolbar } from './drawings/DrawingToolbar'
 import { DrawingStyleBar } from './drawings/DrawingStyleBar'
 import { FibSettingsPanel } from './drawings/FibSettingsPanel'
+import { OrderBoxModal } from './drawings/OrderBoxModal'
+import type { Drawing, PositionDrawing } from './drawings/types'
 import { useChartDrawings } from './drawings/useChartDrawings'
 import { LastPriceCountdownPrimitive } from './lastPriceCountdown'
 import { formatLastPrice } from './tickers'
@@ -1105,6 +1107,7 @@ export function CandleChart({
   const la_nweMarkersRef = useRef<LaNweSignalMarkersPrimitive | null>(null)
   const drawingPrimitiveRef = useRef<DrawingPrimitive | null>(null)
   const strategyPrimitiveRef = useRef<DrawingPrimitive | null>(null)
+  const strategyDrawingsRef = useRef<Drawing[]>([])
   const candlesRef = useRef<Candle[]>([])
   const countdownRef = useRef<LastPriceCountdownPrimitive | null>(null)
   const initialRangeRef = useRef<LogicalRange | null>(null)
@@ -1115,6 +1118,7 @@ export function CandleChart({
   const [chartRange, setChartRange] = useState<CandleRange | null>(null)
   const [rangeOpen, setRangeOpen] = useState(false)
   const [hoverCandle, setHoverCandle] = useState<Candle | null>(null)
+  const [orderBox, setOrderBox] = useState<PositionDrawing | null>(null)
   const [rsiSettings, setRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
   const [draftRsiSettings, setDraftRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
   const [la_nweSettings, setLaNweSettings] = useState<LaNweSettings>(DEFAULT_LA_NWE_SETTINGS)
@@ -1739,12 +1743,13 @@ export function CandleChart({
       if (!primitive) {
         return
       }
-      primitive.setState({
-        drawings: strategyPositions(strategyVisibilityRef.current, {
-          candles,
-          rewardRatio: rewardRatioRef.current,
-        }),
+      const drawings = strategyPositions(strategyVisibilityRef.current, {
+        candles,
+        rewardRatio: rewardRatioRef.current,
+        laNweSettings: la_nweSettingsRef.current,
       })
+      strategyDrawingsRef.current = drawings
+      primitive.setState({ drawings })
     }
 
     const paintSma = (candles: Candle[]) => {
@@ -1932,16 +1937,18 @@ export function CandleChart({
     }
     const candles = candlesRef.current
     if (candles.length === 0) {
+      strategyDrawingsRef.current = []
       primitive.setState({ drawings: [] })
       return
     }
-    primitive.setState({
-      drawings: strategyPositions(strategyVisibility, {
-        candles,
-        rewardRatio,
-      }),
+    const drawings = strategyPositions(strategyVisibility, {
+      candles,
+      rewardRatio,
+      laNweSettings: la_nweSettings,
     })
-  }, [strategyVisibility, rewardRatio, chartReady, pair, timeframe])
+    strategyDrawingsRef.current = drawings
+    primitive.setState({ drawings })
+  }, [strategyVisibility, rewardRatio, la_nweSettings, chartReady, pair, timeframe])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -1950,7 +1957,7 @@ export function CandleChart({
     }
     const element = chart.chartElement()
 
-    const localPoint = (event: PointerEvent) => {
+    const localPoint = (event: MouseEvent) => {
       const rect = element.getBoundingClientRect()
       return { x: event.clientX - rect.left, y: event.clientY - rect.top }
     }
@@ -1988,11 +1995,25 @@ export function CandleChart({
       }
     }
 
+    const onDoubleClick = (event: MouseEvent) => {
+      const local = localPoint(event)
+      const hit = strategyPrimitiveRef.current?.hitDrawing(local.x, local.y)
+      const drawing = hit ? strategyDrawingsRef.current.find((item) => item.id === hit.id) : null
+      if (drawing?.type !== 'longPosition' && drawing?.type !== 'shortPosition') {
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      setOrderBox(drawing)
+    }
+
     element.addEventListener('pointerdown', onPointerDown, true)
     element.addEventListener('pointerup', onPointerUp, true)
+    element.addEventListener('dblclick', onDoubleClick, true)
     return () => {
       element.removeEventListener('pointerdown', onPointerDown, true)
       element.removeEventListener('pointerup', onPointerUp, true)
+      element.removeEventListener('dblclick', onDoubleClick, true)
     }
   }, [chartReady])
 
@@ -3040,6 +3061,9 @@ export function CandleChart({
             onClose={() => setSelectedId(null)}
           />
         ) : null}
+        {orderBox ? (
+          <OrderBoxModal drawing={orderBox} candles={loadedCandles} onClose={() => setOrderBox(null)} />
+        ) : null}
         {backtestStrategy ? (
           <BacktestModal
             key={backtestStrategy}
@@ -3048,6 +3072,7 @@ export function CandleChart({
             onTimeframeChange={onTimeframeChange}
             rewardRatio={rewardRatio}
             onRewardRatioChange={onRewardRatioChange}
+            laNweSettings={la_nweSettings}
             strategyId={backtestStrategy}
             onClose={onBacktestClose}
           />

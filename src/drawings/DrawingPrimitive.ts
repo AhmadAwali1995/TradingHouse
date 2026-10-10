@@ -742,7 +742,13 @@ export class DrawingPrimitive implements ISeriesPrimitive {
         typeof row.high === 'number' &&
         typeof row.low === 'number'
       ) {
-        bars.push({ time: row.time, open: row.open, high: row.high, low: row.low })
+        bars.push({
+          time: row.time,
+          open: row.open,
+          high: row.high,
+          low: row.low,
+          close: 'close' in row && typeof row.close === 'number' ? row.close : undefined,
+        })
       }
     }
     return {

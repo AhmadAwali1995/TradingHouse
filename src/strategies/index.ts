@@ -5,4 +5,4 @@ export {
   type StrategyVisibility,
 } from './catalog'
 export { strategyPositions } from './registry'
-export type { RewardRatio, StrategyContext, StrategyDefinition } from './types'
+export { REWARD_RATIOS, type RewardRatio, type StrategyContext, type StrategyDefinition } from './types'

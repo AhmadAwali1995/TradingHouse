@@ -6,7 +6,7 @@ import {
   type IndicatorId,
   type IndicatorVisibility,
 } from './indicatorCatalog'
-import { STRATEGY_ITEMS, type RewardRatio, type StrategyId, type StrategyVisibility } from './strategies'
+import { REWARD_RATIOS, STRATEGY_ITEMS, type RewardRatio, type StrategyId, type StrategyVisibility } from './strategies'
 import {
   fetchPairTickers,
   formatChangePercent,
@@ -362,7 +362,7 @@ export function Watchlist({
                 <span className="tv-watchlist__indicator-name">{strategy.label}</span>
                 <div className="tv-watchlist__indicator-actions">
                   <div className="tv-watchlist__ratio" role="radiogroup" aria-label="Reward to risk">
-                      {([2, 3] as const).map((ratio) => (
+                      {REWARD_RATIOS.map((ratio) => (
                         <button
                           key={ratio}
                           type="button"

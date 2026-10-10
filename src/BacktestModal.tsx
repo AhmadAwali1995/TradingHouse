@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { TIMEFRAMES, type Candle, type TimeframeId } from './candles'
+import type { LaNweSettings } from './indicators'
 import { runLuxAlgoBacktest, type BacktestResult } from './backtest/runBacktest'
-import { STRATEGY_ITEMS, type RewardRatio, type StrategyId } from './strategies'
+import { REWARD_RATIOS, STRATEGY_ITEMS, type RewardRatio, type StrategyId } from './strategies'
 import './BacktestModal.css'
 
 function dateInputValue(date: Date): string {
@@ -87,6 +88,7 @@ export function BacktestModal({
   onTimeframeChange,
   rewardRatio,
   onRewardRatioChange,
+  laNweSettings,
   strategyId,
   onClose,
 }: {
@@ -95,6 +97,7 @@ export function BacktestModal({
   onTimeframeChange: (timeframe: TimeframeId) => void
   rewardRatio: RewardRatio
   onRewardRatioChange: (ratio: RewardRatio) => void
+  laNweSettings: LaNweSettings
   strategyId: StrategyId
   onClose: () => void
 }) {
@@ -188,6 +191,7 @@ export function BacktestModal({
         to: toTime,
         amount: invested,
         strategyId,
+        laNweSettings,
       }),
     )
   }
@@ -269,7 +273,7 @@ export function BacktestModal({
           <div className="backtest__ratio-field">
             <span>RRR</span>
             <div className="backtest__ratio" role="radiogroup" aria-label="Reward to risk">
-              {([2, 3] as const).map((ratio) => (
+              {REWARD_RATIOS.map((ratio) => (
                 <button
                   key={ratio}
                   type="button"
@@ -348,7 +352,7 @@ export function BacktestModal({
                     </tr>
                   ) : (
                     result.trades.map((trade) => (
-                      <tr key={`${trade.time}-${trade.side}`}>
+                      <tr key={`${trade.time}-${trade.exitTime}-${trade.result}-${trade.profit}`}>
                         <td>{formatWhen(trade.time)}</td>
                         <td>Long</td>
                         <td>
