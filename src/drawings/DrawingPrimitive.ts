@@ -109,12 +109,25 @@ function drawPosition(
   const stopTop = Math.min(entryY, stopY)
   const stopHeight = Math.abs(stopY - entryY)
   const stats = positionStats(drawing, convert.bars)
+  const long = drawing.type === 'longPosition'
+  const exitPrice = stats.exitPrice
+  const closedBeforeTarget = stats.exitKind !== 'target' && exitPrice !== null
+  const closeY = closedBeforeTarget ? convert.priceToY(exitPrice) : null
+  const reachedClose =
+    closeY !== null &&
+    exitPrice !== null &&
+    (long ? exitPrice > drawing.entryPrice : exitPrice < drawing.entryPrice)
   const profitFill = stats.trigger === 'target' ? 'rgba(8, 153, 129, 0.45)' : stats.trigger === 'stop' ? 'rgba(8, 153, 129, 0.08)' : 'rgba(8, 153, 129, 0.22)'
   const stopFill = stats.trigger === 'stop' ? 'rgba(242, 54, 69, 0.45)' : stats.trigger === 'target' ? 'rgba(242, 54, 69, 0.08)' : 'rgba(242, 54, 69, 0.22)'
 
   ctx.save()
-  ctx.fillStyle = profitFill
-  ctx.fillRect(x, profitTop, width, profitHeight)
+  if (reachedClose && closeY !== null) {
+    ctx.fillStyle = 'rgba(8, 153, 129, 0.45)'
+    ctx.fillRect(x, Math.min(entryY, closeY), width, Math.abs(closeY - entryY))
+  } else if (!closedBeforeTarget) {
+    ctx.fillStyle = profitFill
+    ctx.fillRect(x, profitTop, width, profitHeight)
+  }
   ctx.fillStyle = stopFill
   ctx.fillRect(x, stopTop, width, stopHeight)
   ctx.lineWidth = 1

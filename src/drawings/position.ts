@@ -186,6 +186,8 @@ export function positionStats(drawing: PositionDrawing, bars: PositionBar[]) {
 
   return {
     trigger,
+    exitKind: exit?.kind ?? null,
+    exitPrice: exit?.price ?? null,
     targetLabel: `${exit?.kind === 'target' ? 'Take profit' : 'Target'}: ${formatPrice(drawing.targetPrice)} (${formatPercent(targetPct)})${showOnTarget ? result : ''}`,
     stopLabel: `${exit?.kind === 'stop' ? 'Stop loss' : 'Stop'}: ${formatPrice(drawing.stopPrice)} (${formatPercent(stopPct)})${showOnStop ? result : ''}`,
   }

@@ -8,6 +8,7 @@ import type { StrategyDefinition } from '../types'
 export const BETTER_RSI_ID = 'betterRsi' as const
 
 const OVERSOLD = 30
+const CENTER = 50
 
 function barSeconds(candles: Candle[]): number {
   for (let index = candles.length - 1; index > 0; index -= 1) {
@@ -28,12 +29,45 @@ export const betterRsiStrategy = {
     const bar = barSeconds(context.candles)
     const lastTime = context.candles.at(-1)?.time ?? 0
     const positions: PositionDrawing[] = []
-    const open: { multiple: number; portion: number; startTime: number; entryPrice: number; exitTime: number | null }[] = []
+    const open: {
+      multiple: number
+      portion: number
+      startTime: number
+      entryPrice: number
+      exitTime: number | null
+      crossedCenter: boolean
+    }[] = []
     let waitingForReversal = false
 
     for (let index = 1; index < points.length; index += 1) {
       const previous = points[index - 1].value
       const current = points[index].value
+      const point = points[index]
+
+      for (const position of open) {
+        if (position.exitTime !== null && position.exitTime <= point.time) {
+          continue
+        }
+        if (point.time <= position.startTime) {
+          continue
+        }
+        if (!position.crossedCenter) {
+          if (previous <= CENTER && current > CENTER) {
+            position.crossedCenter = true
+          }
+          continue
+        }
+        if (!(current < previous) || (position.exitTime !== null && point.time >= position.exitTime)) {
+          continue
+        }
+        position.exitTime = point.time
+        const placed = positions.find((item) => item.id === `strategy-betterRsi-${position.startTime}-${position.multiple}`)
+        if (!placed) {
+          continue
+        }
+        const rawEnd = point.time
+        placed.endTime = rawEnd - position.startTime < bar ? position.startTime + bar : rawEnd
+      }
 
       if (!waitingForReversal) {
         if (previous >= OVERSOLD && current < OVERSOLD) {
@@ -47,7 +81,6 @@ export const betterRsiStrategy = {
       }
 
       waitingForReversal = false
-      const point = points[index]
       const candle = candlesByTime.get(point.time)
       if (!candle) {
         continue
@@ -91,6 +124,7 @@ export const betterRsiStrategy = {
           startTime: point.time,
           entryPrice: entry,
           exitTime,
+          crossedCenter: false,
         })
         positions.push({
           id: `strategy-betterRsi-${point.time}-${target.multiple}`,
