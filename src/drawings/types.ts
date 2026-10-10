@@ -81,6 +81,7 @@ export type PositionDrawing = DrawingBase & {
   type: 'longPosition' | 'shortPosition'
   startTime: number
   endTime: number
+  activeFrom?: number
   entryPrice: number
   targetPrice: number
   stopPrice: number

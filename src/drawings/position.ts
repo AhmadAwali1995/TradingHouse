@@ -113,12 +113,16 @@ function barHit(
   return null
 }
 
+function riskStart(drawing: { startTime: number; activeFrom?: number }) {
+  return drawing.activeFrom ?? drawing.startTime
+}
+
 export function positionExitTime(
-  drawing: Pick<PositionDrawing, 'type' | 'startTime' | 'targetPrice' | 'stopPrice'>,
+  drawing: Pick<PositionDrawing, 'type' | 'startTime' | 'targetPrice' | 'stopPrice' | 'activeFrom'>,
   bars: PositionBar[],
 ): number | null {
   for (const bar of bars) {
-    if (bar.time <= drawing.startTime) {
+    if (bar.time <= riskStart(drawing)) {
       continue
     }
     if (barHit(drawing, bar)) {
@@ -130,7 +134,7 @@ export function positionExitTime(
 
 export function positionTrigger(drawing: PositionDrawing, bars: PositionBar[]): PositionTrigger {
   for (const bar of bars) {
-    if (bar.time <= drawing.startTime) {
+    if (bar.time <= riskStart(drawing)) {
       continue
     }
     const hit = barHit(drawing, bar)

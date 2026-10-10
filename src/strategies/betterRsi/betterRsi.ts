@@ -28,6 +28,7 @@ export const betterRsiStrategy = {
     const bar = barSeconds(context.candles)
     const lastTime = context.candles.at(-1)?.time ?? 0
     const positions: PositionDrawing[] = []
+    const open: { multiple: number; portion: number; startTime: number; entryPrice: number; exitTime: number | null }[] = []
     let waitingForReversal = false
 
     for (let index = 1; index < points.length; index += 1) {
@@ -56,13 +57,41 @@ export const betterRsiStrategy = {
       if (!acceptsLongRisk(entry, stop)) {
         continue
       }
-      for (const target of longTargetLevels(entry, stop, context.rewardRatio)) {
+      const targets = longTargetLevels(entry, stop, context.rewardRatio)
+      const stillOpen = open.filter((position) => position.exitTime === null || position.exitTime > point.time)
+      if (stillOpen.length > 0) {
+        for (const position of stillOpen) {
+          const target = targets.find((item) => item.multiple === position.multiple) ?? targets[0]
+          const placed = positions.find((item) => item.id === `strategy-betterRsi-${position.startTime}-${position.multiple}`)
+          if (!placed) {
+            continue
+          }
+          placed.stopPrice = stop
+          placed.targetPrice = target.targetPrice
+          placed.activeFrom = point.time
+          position.exitTime = positionExitTime(
+            { type: 'longPosition', startTime: point.time, targetPrice: target.targetPrice, stopPrice: stop },
+            context.candles,
+          )
+          const rawEnd = position.exitTime ?? Math.max(lastTime, position.startTime + bar)
+          placed.endTime = rawEnd - position.startTime < bar ? position.startTime + bar : rawEnd
+        }
+        continue
+      }
+      for (const target of targets) {
         const exitTime = positionExitTime(
           { type: 'longPosition', startTime: point.time, targetPrice: target.targetPrice, stopPrice: stop },
           context.candles,
         )
         const rawEnd = exitTime ?? Math.max(lastTime, point.time + bar)
         const endTime = rawEnd - point.time < bar ? point.time + bar : rawEnd
+        open.push({
+          multiple: target.multiple,
+          portion: target.portion,
+          startTime: point.time,
+          entryPrice: entry,
+          exitTime,
+        })
         positions.push({
           id: `strategy-betterRsi-${point.time}-${target.multiple}`,
           type: 'longPosition',
@@ -70,6 +99,7 @@ export const betterRsiStrategy = {
           lineWidth: DEFAULT_LINE_WIDTH,
           lineStyle: DEFAULT_LINE_STYLE,
           startTime: point.time,
+          activeFrom: point.time,
           endTime,
           accountSize: DEFAULT_ACCOUNT_SIZE * target.portion,
           riskPercent: DEFAULT_RISK_PERCENT,

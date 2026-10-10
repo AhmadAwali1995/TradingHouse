@@ -21,6 +21,7 @@ type OpenLong = {
   multiple: number
   portion: number
   startTime: number
+  activeFrom: number
   entryPrice: number
   targetPrice: number
   stopPrice: number
@@ -57,11 +58,27 @@ export const luxAlgoEnhStrategy = {
       if (!acceptsLongRisk(entry, stop)) {
         continue
       }
-      for (const target of longTargetLevels(entry, stop, context.rewardRatio)) {
+      const targets = longTargetLevels(entry, stop, context.rewardRatio)
+      const stillOpen = open.filter((position) => position.exitTime === null || position.exitTime > cross.time)
+      if (stillOpen.length > 0) {
+        for (const position of stillOpen) {
+          const target = targets.find((item) => item.multiple === position.multiple) ?? targets[0]
+          position.stopPrice = stop
+          position.targetPrice = target.targetPrice
+          position.activeFrom = cross.time
+          position.exitTime = positionExitTime(
+            { type: 'longPosition', startTime: cross.time, targetPrice: target.targetPrice, stopPrice: stop },
+            context.candles,
+          )
+        }
+        continue
+      }
+      for (const target of targets) {
         open.push({
           multiple: target.multiple,
           portion: target.portion,
           startTime: cross.time,
+          activeFrom: cross.time,
           entryPrice: entry,
           targetPrice: target.targetPrice,
           stopPrice: stop,
@@ -83,6 +100,7 @@ export const luxAlgoEnhStrategy = {
         lineWidth: DEFAULT_LINE_WIDTH,
         lineStyle: DEFAULT_LINE_STYLE,
         startTime: position.startTime,
+        activeFrom: position.activeFrom,
         endTime,
         accountSize: DEFAULT_ACCOUNT_SIZE * position.portion,
         portion: position.portion,
