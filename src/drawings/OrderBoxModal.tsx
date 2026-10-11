@@ -50,6 +50,7 @@ export function OrderBoxModal({
   const reward = riskDist > 0 ? Math.abs(drawing.targetPrice - drawing.entryPrice) / riskDist : null
   const status = signalExit ? 'Signal' : trigger === 'target' ? 'Take profit' : trigger === 'stop' ? 'Stop loss' : 'Open'
   const rows = [
+    ...(drawing.mark ? [['Condition', drawing.mark]] : []),
     ['Status', status],
     ['Entry', price(drawing.entryPrice)],
     ['Stop', price(drawing.stopPrice)],

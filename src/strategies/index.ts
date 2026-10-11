@@ -7,6 +7,7 @@ export {
 export {
   STRATEGY_ENTRY_OPTIONS,
   defaultStrategyEntries,
+  setRsiEnhLevel,
   toggleStrategyEntry,
   type StrategyEntrySettings,
 } from './entries'

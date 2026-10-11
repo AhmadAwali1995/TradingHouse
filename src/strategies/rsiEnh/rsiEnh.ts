@@ -9,6 +9,7 @@ export const RSI_ENH_ID = 'rsiEnh' as const
 
 const OVERSOLD = 30
 const CENTER = 50
+const MIDDLE_MARK = '50'
 
 function barSeconds(candles: Candle[]): number {
   for (let index = candles.length - 1; index > 0; index -= 1) {
@@ -36,8 +37,51 @@ export const rsiEnhStrategy = {
       entryPrice: number
       exitTime: number | null
       crossedCenter: boolean
+      mark: string
     }[] = []
     let waitingForReversal = false
+    let waitingFor55 = false
+
+    const stillOpenAt = (time: number) =>
+      open.filter((position) => position.exitTime === null || position.exitTime > time)
+
+    const openLong = (time: number, entry: number, stop: number, mark: string, crossedCenter: boolean) => {
+      const targets = longTargetLevels(entry, stop, context.rewardRatio)
+      for (const target of targets) {
+        const exitTime = positionExitTime(
+          { type: 'longPosition', startTime: time, targetPrice: target.targetPrice, stopPrice: stop },
+          context.candles,
+        )
+        const rawEnd = exitTime ?? Math.max(lastTime, time + bar)
+        const endTime = rawEnd - time < bar ? time + bar : rawEnd
+        open.push({
+          multiple: target.multiple,
+          portion: target.portion,
+          startTime: time,
+          entryPrice: entry,
+          exitTime,
+          crossedCenter,
+          mark,
+        })
+        positions.push({
+          id: `strategy-rsiEnh-${time}-${target.multiple}`,
+          type: 'longPosition',
+          color: '#d1d4dc',
+          lineWidth: DEFAULT_LINE_WIDTH,
+          lineStyle: DEFAULT_LINE_STYLE,
+          startTime: time,
+          activeFrom: time,
+          endTime,
+          accountSize: DEFAULT_ACCOUNT_SIZE * target.portion,
+          riskPercent: DEFAULT_RISK_PERCENT,
+          portion: target.portion,
+          entryPrice: entry,
+          targetPrice: target.targetPrice,
+          stopPrice: stop,
+          mark,
+        })
+      }
+    }
 
     for (let index = 1; index < points.length; index += 1) {
       const previous = points[index - 1].value
@@ -51,13 +95,18 @@ export const rsiEnhStrategy = {
         if (point.time <= position.startTime) {
           continue
         }
-        if (!position.crossedCenter) {
-          if (previous <= CENTER && current > CENTER) {
-            position.crossedCenter = true
+        const reachedExit = position.mark === MIDDLE_MARK && current >= context.entries.rsiEnh.exitLevel
+        if (!reachedExit) {
+          if (!position.crossedCenter) {
+            if (previous <= CENTER && current > CENTER) {
+              position.crossedCenter = true
+            }
+            continue
           }
-          continue
-        }
-        if (!(current < previous) || (position.exitTime !== null && point.time >= position.exitTime)) {
+          if (!(current < previous) || (position.exitTime !== null && point.time >= position.exitTime)) {
+            continue
+          }
+        } else if (position.exitTime !== null && point.time >= position.exitTime) {
           continue
         }
         position.exitTime = point.time
@@ -67,6 +116,21 @@ export const rsiEnhStrategy = {
         }
         const rawEnd = point.time
         placed.endTime = rawEnd - position.startTime < bar ? position.startTime + bar : rawEnd
+      }
+
+      if (context.entries.rsiEnh.cross50To55) {
+        if (!waitingFor55 && previous <= CENTER && current > CENTER) {
+          waitingFor55 = true
+        }
+        if (waitingFor55 && current >= context.entries.rsiEnh.entryLevel) {
+          waitingFor55 = false
+          const candle = candlesByTime.get(point.time)
+          if (candle && stillOpenAt(point.time).length === 0 && acceptsLongRisk(candle.close, candle.low)) {
+            openLong(point.time, candle.close, candle.low, MIDDLE_MARK, true)
+          }
+        } else if (waitingFor55 && current < previous) {
+          waitingFor55 = false
+        }
       }
 
       if (!context.entries.rsiEnh.oversoldTurn) {
@@ -95,7 +159,7 @@ export const rsiEnhStrategy = {
         continue
       }
       const targets = longTargetLevels(entry, stop, context.rewardRatio)
-      const stillOpen = open.filter((position) => position.exitTime === null || position.exitTime > point.time)
+      const stillOpen = stillOpenAt(point.time)
       if (stillOpen.length > 0) {
         for (const position of stillOpen) {
           const target = targets.find((item) => item.multiple === position.multiple) ?? targets[0]
@@ -115,38 +179,7 @@ export const rsiEnhStrategy = {
         }
         continue
       }
-      for (const target of targets) {
-        const exitTime = positionExitTime(
-          { type: 'longPosition', startTime: point.time, targetPrice: target.targetPrice, stopPrice: stop },
-          context.candles,
-        )
-        const rawEnd = exitTime ?? Math.max(lastTime, point.time + bar)
-        const endTime = rawEnd - point.time < bar ? point.time + bar : rawEnd
-        open.push({
-          multiple: target.multiple,
-          portion: target.portion,
-          startTime: point.time,
-          entryPrice: entry,
-          exitTime,
-          crossedCenter: false,
-        })
-        positions.push({
-          id: `strategy-rsiEnh-${point.time}-${target.multiple}`,
-          type: 'longPosition',
-          color: '#d1d4dc',
-          lineWidth: DEFAULT_LINE_WIDTH,
-          lineStyle: DEFAULT_LINE_STYLE,
-          startTime: point.time,
-          activeFrom: point.time,
-          endTime,
-          accountSize: DEFAULT_ACCOUNT_SIZE * target.portion,
-          riskPercent: DEFAULT_RISK_PERCENT,
-          portion: target.portion,
-          entryPrice: entry,
-          targetPrice: target.targetPrice,
-          stopPrice: stop,
-        })
-      }
+      openLong(point.time, entry, stop, '30', false)
     }
 
     return positions

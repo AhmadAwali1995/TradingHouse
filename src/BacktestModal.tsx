@@ -3,6 +3,7 @@ import { TIMEFRAMES, type Candle, type TimeframeId } from './candles'
 import type { LaNweSettings } from './indicators'
 import { runLuxAlgoBacktest, type BacktestResult } from './backtest/runBacktest'
 import { REWARD_RATIOS, STRATEGY_ITEMS, type RewardRatio, type StrategyEntrySettings, type StrategyId } from './strategies'
+import { isTestTimeframe, type DataMode } from './testCandles'
 import './BacktestModal.css'
 
 function dateInputValue(date: Date): string {
@@ -91,6 +92,7 @@ export function BacktestModal({
   laNweSettings,
   entries,
   strategyId,
+  dataMode,
   onClose,
 }: {
   candles: Candle[]
@@ -101,6 +103,7 @@ export function BacktestModal({
   laNweSettings: LaNweSettings
   entries: StrategyEntrySettings
   strategyId: StrategyId
+  dataMode: DataMode
   onClose: () => void
 }) {
   const [month, setMonth] = useState('')
@@ -224,7 +227,7 @@ export function BacktestModal({
               onChange={(event) => onTimeframeChange(event.target.value as TimeframeId)}
             >
               {TIMEFRAMES.map((item) => (
-                <option key={item.id} value={item.id}>
+                <option key={item.id} value={item.id} disabled={dataMode === 'test' && !isTestTimeframe(item.id)}>
                   {item.label}
                 </option>
               ))}

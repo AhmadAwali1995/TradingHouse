@@ -269,6 +269,29 @@
   margin-top: 2px;
 }
 
+.tv-watchlist__strategy-levels {
+  display: flex;
+  gap: 12px;
+}
+
+.tv-watchlist__strategy-levels label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #d1d4dc;
+  font-size: 12px;
+}
+
+.tv-watchlist__strategy-levels input {
+  width: 72px;
+  padding: 4px 6px;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  background: #131722;
+  color: #d1d4dc;
+  font: inherit;
+}
+
 .tv-watchlist__indicator-actions {
   display: inline-flex;
   align-items: center;
@@ -326,7 +349,10 @@
   cursor: pointer;
 }
 
-.tv-watchlist__row:hover {
+.tv-watchlist__row:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
   background: #1e222d;
 }
 

@@ -26,6 +26,7 @@ import {
   type TimeframeId,
 } from './candles'
 import type { Pair } from './data/config'
+import { fetchTestCandles, isTestTimeframe, type DataMode } from './testCandles'
 import {
   CIPHER_B_COLORS,
   CM_MACD_COLORS,
@@ -57,6 +58,7 @@ import {
   type SmaSettings,
   type TvMacdSettings,
 } from './indicators'
+import { RsiZoneLinePrimitive } from './rsiZoneLine'
 import type { IndicatorId, IndicatorVisibility } from './indicatorCatalog'
 import { BacktestModal } from './BacktestModal'
 import { strategyPositions, type RewardRatio, type StrategyEntrySettings, type StrategyId, type StrategyVisibility } from './strategies'
@@ -96,94 +98,6 @@ const DEFAULT_RSI_SETTINGS: RsiSettings = {
   outerLow: 20,
 }
 
-type RsiPoint = {
-  time: number
-  value: number
-}
-
-type ChartLinePoint = {
-  time: UTCTimestamp
-  value?: number
-}
-
-function interpolateThresholdPoint(
-  left: RsiPoint,
-  right: RsiPoint,
-  threshold: number,
-): RsiPoint {
-  const delta = right.value - left.value
-  if (delta === 0) {
-    return { time: left.time, value: threshold }
-  }
-
-  const ratio = (threshold - left.value) / delta
-  return {
-    time: left.time + (right.time - left.time) * ratio,
-    value: threshold,
-  }
-}
-
-function samePoint(left: ChartLinePoint, right: ChartLinePoint): boolean {
-  return left.time === right.time && left.value === right.value
-}
-
-function buildZoneSeries(
-  points: RsiPoint[],
-  thresholds: number[],
-  isInsideZone: (value: number) => boolean,
-): ChartLinePoint[] {
-  const data: ChartLinePoint[] = []
-
-  const pushPoint = (point: ChartLinePoint) => {
-    const last = data[data.length - 1]
-    if (!last || !samePoint(last, point)) {
-      data.push(point)
-    }
-  }
-
-  const pushGap = (time: number) => {
-    const gap = { time: time as UTCTimestamp }
-    const last = data[data.length - 1]
-    if (!last || last.value !== undefined) {
-      data.push(gap)
-    }
-  }
-
-  for (let index = 1; index < points.length; index += 1) {
-    const previous = points[index - 1]
-    const current = points[index]
-    const segmentPoints = [previous]
-
-    for (const threshold of thresholds) {
-      const leftDistance = previous.value - threshold
-      const rightDistance = current.value - threshold
-      if (leftDistance === 0 || rightDistance === 0 || leftDistance * rightDistance >= 0) {
-        continue
-      }
-      segmentPoints.push(interpolateThresholdPoint(previous, current, threshold))
-    }
-
-    segmentPoints.push(current)
-    segmentPoints.sort((left, right) => left.time - right.time)
-
-    for (let splitIndex = 1; splitIndex < segmentPoints.length; splitIndex += 1) {
-      const left = segmentPoints[splitIndex - 1]
-      const right = segmentPoints[splitIndex]
-      const middleValue = (left.value + right.value) / 2
-
-      if (!isInsideZone(middleValue)) {
-        pushGap(right.time)
-        continue
-      }
-
-      pushPoint({ time: left.time as UTCTimestamp, value: left.value })
-      pushPoint({ time: right.time as UTCTimestamp, value: right.value })
-    }
-  }
-
-  return data
-}
-
 function normalizeRsiSettings(settings: RsiSettings): RsiSettings {
   const outerLow = Math.max(0, Math.min(100, settings.outerLow))
   const lowerBand = Math.max(outerLow, Math.min(100, settings.lowerBand))
@@ -210,6 +124,7 @@ type RsiPaneSeries = {
   white: ISeriesApi<'Line'>
   upper: ISeriesApi<'Line'>
   lower: ISeriesApi<'Line'>
+  zoneLine: RsiZoneLinePrimitive
 }
 
 type CipherPaneSeries = {
@@ -477,7 +392,10 @@ function createRsiSeries(chart: IChartApi, settings: RsiSettings, paneIndex: num
     title: '',
   })
 
-  return { series, bandTop, bandBottom, midUp, midDown, white, upper, lower }
+  const zoneLine = new RsiZoneLinePrimitive()
+  series.attachPrimitive(zoneLine)
+
+  return { series, bandTop, bandBottom, midUp, midDown, white, upper, lower, zoneLine }
 }
 
 function paintRsiSeries(pane: RsiPaneSeries, candles: Candle[], settings: RsiSettings) {
@@ -508,19 +426,10 @@ function paintRsiSeries(pane: RsiPaneSeries, candles: Candle[], settings: RsiSet
         : { time: point.time as UTCTimestamp },
     ),
   )
-  pane.white.setData(
-    buildZoneSeries(
-      points,
-      [settings.lowerBand, settings.upperBand],
-      (value) => value >= settings.lowerBand && value <= settings.upperBand,
-    ),
-  )
-  pane.upper.setData(
-    buildZoneSeries(points, [settings.lowerBand, settings.upperBand], (value) => value > settings.upperBand),
-  )
-  pane.lower.setData(
-    buildZoneSeries(points, [settings.lowerBand, settings.upperBand], (value) => value < settings.lowerBand),
-  )
+  pane.white.setData([])
+  pane.upper.setData([])
+  pane.lower.setData([])
+  pane.zoneLine.setLine(points, settings.lowerBand, settings.upperBand)
   pane.series.setData(
     points.map((point) => ({
       time: point.time as UTCTimestamp,
@@ -1056,6 +965,7 @@ export function CandleChart({
   strategyVisibility,
   strategyEntries,
   rewardRatio,
+  dataMode,
   onRewardRatioChange,
   backtestStrategy,
   onBacktestClose,
@@ -1070,6 +980,7 @@ export function CandleChart({
   strategyVisibility: StrategyVisibility
   strategyEntries: StrategyEntrySettings
   rewardRatio: RewardRatio
+  dataMode: DataMode
   onRewardRatioChange: (ratio: RewardRatio) => void
   backtestStrategy: StrategyId | null
   onBacktestClose: () => void
@@ -1089,6 +1000,7 @@ export function CandleChart({
   const rsiWhiteRef = useRef<ISeriesApi<'Line'> | null>(null)
   const rsiUpperRef = useRef<ISeriesApi<'Line'> | null>(null)
   const rsiLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const rsiZoneLineRef = useRef<RsiZoneLinePrimitive | null>(null)
   const cipherWt1Ref = useRef<ISeriesApi<'Baseline'> | null>(null)
   const cipherWt2Ref = useRef<ISeriesApi<'Baseline'> | null>(null)
   const cipherDiffRef = useRef<ISeriesApi<'Baseline'> | null>(null)
@@ -1185,10 +1097,11 @@ export function CandleChart({
     const white = rsiWhiteRef.current
     const upper = rsiUpperRef.current
     const lower = rsiLowerRef.current
-    if (!series || !bandTop || !bandBottom || !midUp || !midDown || !white || !upper || !lower) {
+    const zoneLine = rsiZoneLineRef.current
+    if (!series || !bandTop || !bandBottom || !midUp || !midDown || !white || !upper || !lower || !zoneLine) {
       return null
     }
-    return { series, bandTop, bandBottom, midUp, midDown, white, upper, lower }
+    return { series, bandTop, bandBottom, midUp, midDown, white, upper, lower, zoneLine }
   }
 
   const getCipherPane = (): CipherPaneSeries | null => {
@@ -1396,6 +1309,7 @@ export function CandleChart({
       rsiWhiteRef.current = null
       rsiUpperRef.current = null
       rsiLowerRef.current = null
+      rsiZoneLineRef.current = null
       cipherWt1Ref.current = null
       cipherWt2Ref.current = null
       cipherDiffRef.current = null
@@ -1489,6 +1403,7 @@ export function CandleChart({
     rsiWhiteRef.current = pane.white
     rsiUpperRef.current = pane.upper
     rsiLowerRef.current = pane.lower
+    rsiZoneLineRef.current = pane.zoneLine
     if (candlesRef.current.length > 0) {
       paintRsiSeries(pane, candlesRef.current, rsiSettings)
     }
@@ -1505,6 +1420,7 @@ export function CandleChart({
         rsiWhiteRef.current = null
         rsiUpperRef.current = null
         rsiLowerRef.current = null
+        rsiZoneLineRef.current = null
       }
       if (activeChart) {
         removeRsiSeries(activeChart, pane)
@@ -1642,10 +1558,11 @@ export function CandleChart({
       const white = rsiWhiteRef.current
       const upper = rsiUpperRef.current
       const lower = rsiLowerRef.current
-      if (!rsiSeries || !bandTop || !bandBottom || !midUp || !midDown || !white || !upper || !lower) {
+      const zoneLine = rsiZoneLineRef.current
+      if (!rsiSeries || !bandTop || !bandBottom || !midUp || !midDown || !white || !upper || !lower || !zoneLine) {
         return null
       }
-      return { series: rsiSeries, bandTop, bandBottom, midUp, midDown, white, upper, lower }
+      return { series: rsiSeries, bandTop, bandBottom, midUp, midDown, white, upper, lower, zoneLine }
     }
 
     const readCipherPane = (): CipherPaneSeries | null => {
@@ -1828,7 +1745,9 @@ export function CandleChart({
       }
     }
 
-    void fetchCandles(pair, timeframe, controller.signal, chartRange ?? undefined)
+    void (dataMode === 'test'
+      ? fetchTestCandles(pair.symbol, timeframe, controller.signal, chartRange ?? undefined)
+      : fetchCandles(pair, timeframe, controller.signal, chartRange ?? undefined))
       .then((history) => {
         if (closed || controller.signal.aborted || seriesRef.current !== series) {
           return
@@ -1845,6 +1764,10 @@ export function CandleChart({
           centerLastCandle(chartRef.current, candles.length, (range) => {
             initialRangeRef.current = range
           })
+        }
+
+        if (dataMode === 'test') {
+          return
         }
 
         live = subscribeLiveCandles(
@@ -1892,7 +1815,7 @@ export function CandleChart({
       live?.close()
       candlesRef.current = []
     }
-  }, [pair, timeframe, chartReady, chartRange])
+  }, [pair, timeframe, chartReady, chartRange, dataMode])
 
   useEffect(() => {
     const la_nweUpper = la_nweUpperRef.current
@@ -2333,12 +2256,15 @@ export function CandleChart({
           ) : null}
         </div>
         <div className="candle-chart__timeframes" role="tablist" aria-label="Timeframes">
-          {TIMEFRAMES.map((item) => (
+          {TIMEFRAMES.map((item) => {
+            const unavailable = dataMode === 'test' && !isTestTimeframe(item.id)
+            return (
             <button
               key={item.id}
               type="button"
               role="tab"
               aria-selected={timeframe === item.id}
+              disabled={unavailable}
               className={
                 timeframe === item.id
                   ? 'candle-chart__timeframe is-active'
@@ -2348,7 +2274,8 @@ export function CandleChart({
             >
             {item.label}
           </button>
-          ))}
+            )
+          })}
         </div>
         </div>
       </div>
@@ -3081,6 +3008,7 @@ export function CandleChart({
             laNweSettings={la_nweSettings}
             entries={strategyEntries}
             strategyId={backtestStrategy}
+            dataMode={dataMode}
             onClose={onBacktestClose}
           />
         ) : null}

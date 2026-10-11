@@ -170,6 +170,12 @@ function drawPosition(
     ctx.textBaseline = 'bottom'
     ctx.fillText(stats.stopLabel, x + 6, Math.max(Math.min(stopTop + stopHeight - 4, mediaHeight - 4), entryY + 16))
   }
+  if (drawing.mark) {
+    ctx.fillStyle = '#d1d4dc'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'bottom'
+    ctx.fillText(drawing.mark, x + 6, entryY - 3)
+  }
   ctx.restore()
 }
 

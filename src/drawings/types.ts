@@ -88,6 +88,7 @@ export type PositionDrawing = DrawingBase & {
   accountSize: number
   riskPercent: number
   portion?: number
+  mark?: string
 }
 
 export type Drawing =

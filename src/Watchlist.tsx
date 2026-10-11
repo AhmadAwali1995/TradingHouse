@@ -22,6 +22,7 @@ import {
   type PairTicker,
   subscribeLiveTickers,
 } from './tickers'
+import { fetchTestTickers, isTestSymbol, type DataMode } from './testCandles'
 import './Watchlist.css'
 
 export function Watchlist({
@@ -32,12 +33,14 @@ export function Watchlist({
   strategyVisibility,
   strategyEntries,
   rewardRatio,
+  dataMode,
   settingsOpen,
   onSelect,
   onToggleIndicator,
   onToggleStrategy,
   onRewardRatioChange,
   onToggleStrategyEntry,
+  onSetRsiEnhLevel,
   onOpenBacktest,
   onOpenIndicatorSettings,
 }: {
@@ -48,12 +51,14 @@ export function Watchlist({
   strategyVisibility: StrategyVisibility
   strategyEntries: StrategyEntrySettings
   rewardRatio: RewardRatio
+  dataMode: DataMode
   settingsOpen: IndicatorId | null
   onSelect: (pair: Pair) => void
   onToggleIndicator: (indicator: IndicatorId) => void
   onToggleStrategy: (strategy: StrategyId) => void
   onRewardRatioChange: (ratio: RewardRatio) => void
   onToggleStrategyEntry: (strategy: StrategyId, entry: string) => void
+  onSetRsiEnhLevel: (level: 'entryLevel' | 'exitLevel', value: number) => void
   onOpenBacktest: (strategy: StrategyId) => void
   onOpenIndicatorSettings: (indicator: IndicatorId) => void
 }) {
@@ -86,9 +91,12 @@ export function Watchlist({
 
     const load = async (signal: AbortSignal) => {
       try {
-        const next = await fetchPairTickers(pairs, timeframe, signal)
+        const next = dataMode === 'test' ? await fetchTestTickers(timeframe, signal) : await fetchPairTickers(pairs, timeframe, signal)
         if (!cancelled) {
           setTickers(next)
+          if (dataMode === 'test') {
+            return
+          }
           live = subscribeLiveTickers(pairs, (updates) => {
             if (cancelled) {
               return
@@ -151,7 +159,7 @@ export function Watchlist({
       controller.abort()
       live?.close()
     }
-  }, [pairs, timeframe])
+  }, [pairs, timeframe, dataMode])
 
   return (
     <div className="tv-watchlist">
@@ -227,6 +235,7 @@ export function Watchlist({
                     ? 'is-up'
                     : 'is-down'
               const selected = pair.id === selectedId
+              const unavailable = dataMode === 'test' && !isTestSymbol(pair.symbol)
 
               return (
                 <button
@@ -234,6 +243,7 @@ export function Watchlist({
                   type="button"
                   role="option"
                   aria-selected={selected}
+                  disabled={unavailable}
                   className={
                     selected
                       ? `tv-watchlist__row is-selected ${changeClass}`.trim()
@@ -503,6 +513,32 @@ export function Watchlist({
                       </label>
                     )
                   })}
+                  {strategySettings === 'rsiEnh' ? (
+                    <div className="tv-watchlist__strategy-levels">
+                      <label>
+                        <span>Entry level</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={strategyEntries.rsiEnh.entryLevel}
+                          onChange={(event) => onSetRsiEnhLevel('entryLevel', Number(event.target.value))}
+                        />
+                      </label>
+                      <label>
+                        <span>Exit level</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={strategyEntries.rsiEnh.exitLevel}
+                          onChange={(event) => onSetRsiEnhLevel('exitLevel', Number(event.target.value))}
+                        />
+                      </label>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>

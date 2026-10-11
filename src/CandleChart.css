@@ -160,6 +160,11 @@
   background: #2a2e39;
 }
 
+.candle-chart__timeframe:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .candle-chart__timeframe.is-active {
   color: #d1d4dc;
   border-color: #2a2e39;
