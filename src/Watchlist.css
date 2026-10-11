@@ -353,8 +353,6 @@
   opacity: 0.35;
   cursor: default;
 }
-  background: #1e222d;
-}
 
 .tv-watchlist__row.is-selected {
   background: #2a2e39;
