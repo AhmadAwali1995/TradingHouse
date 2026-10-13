@@ -26,16 +26,37 @@
   flex: 1;
 }
 
-.candle-chart__legend-sma {
+.candle-chart__legend-ma {
   white-space: nowrap;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: #868993;
 }
 
-.candle-chart__legend-sma strong {
-  color: #2962ff;
+.candle-chart__legend-ma strong {
   font-weight: 600;
+}
+
+.candle-chart__legend-dc {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #868993;
+}
+
+.candle-chart__legend-dc strong {
+  font-weight: 600;
+}
+
+.candle-chart__legend-dc .is-upper,
+.candle-chart__legend-dc .is-lower {
+  color: #2962ff;
+}
+
+.candle-chart__legend-dc .is-basis {
+  color: #ff6d00;
 }
 
 .candle-chart__ohlc {
@@ -250,61 +271,17 @@
   z-index: 4;
 }
 
-.candle-chart__indicator-gear--rsi {
-  right: 16px;
-  bottom: 86px;
-}
-
-.candle-chart__indicator-gear--rsi-raised {
-  bottom: 28%;
-}
-
-.candle-chart__indicator-gear--rsi-raised-high {
-  bottom: 42%;
-}
-
-.candle-chart__indicator-gear--stack-1 {
-  bottom: 28%;
-}
-
-.candle-chart__indicator-gear--stack-2 {
-  bottom: 42%;
-}
-
-.candle-chart__indicator-gear--stack-3 {
-  bottom: 56%;
-}
-
-.candle-chart__indicator-gear--cipher {
-  right: 16px;
-  bottom: 86px;
-}
-
-.candle-chart__indicator-gear--cipher-raised {
-  bottom: 28%;
-}
-
-.candle-chart__indicator-gear--macd {
-  right: 16px;
-  bottom: 86px;
-}
-
-.candle-chart__indicator-gear--tv-macd {
-  right: 16px;
-  bottom: 86px;
-}
-
-.candle-chart__indicator-gear--sma {
+.candle-chart__indicator-gear--ma-ribbon {
   top: 8px;
   right: 16px;
 }
 
-.candle-chart__indicator-gear--la_nwe {
+.candle-chart__indicator-gear--dc {
   top: 8px;
   right: 16px;
 }
 
-.candle-chart__indicator-gear--la_nwe-below-sma {
+.candle-chart__indicator-gear--dc-below-ma-ribbon {
   top: 36px;
 }
 
@@ -329,37 +306,57 @@
   z-index: 4;
 }
 
-.candle-chart__settings--rsi {
+.candle-chart__settings--ma-ribbon {
   right: 12px;
   bottom: 116px;
+  width: 520px;
 }
 
-.candle-chart__settings--cipher {
-  right: 12px;
-  bottom: 116px;
+.candle-chart__ma-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1.3fr) minmax(0, 0.9fr) 64px 36px;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
 }
 
-.candle-chart__settings--macd {
-  right: 12px;
-  bottom: 116px;
-  width: 320px;
+.candle-chart__ma-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #d1d4dc;
 }
 
-.candle-chart__settings--tv-macd {
-  right: 12px;
-  bottom: 116px;
-  width: 300px;
+.candle-chart__ma-row select,
+.candle-chart__ma-row input[type='number'] {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  background: #1e222d;
+  color: #d1d4dc;
+  font: inherit;
+  font-size: 12px;
 }
 
-.candle-chart__settings--la_nwe {
-  right: 12px;
-  bottom: 116px;
+.candle-chart__ma-row input[type='color'] {
+  width: 36px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  background: #1e222d;
 }
 
-.candle-chart__settings--sma {
+.candle-chart__ma-row input:disabled,
+.candle-chart__ma-row select:disabled {
+  opacity: 0.45;
+}
+
+.candle-chart__settings--dc {
   right: 12px;
   bottom: 116px;
-  width: 300px;
 }
 
 .candle-chart__settings-title {

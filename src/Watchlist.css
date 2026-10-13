@@ -292,6 +292,33 @@
   font: inherit;
 }
 
+.tv-watchlist__rrr {
+  display: inline-flex;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.tv-watchlist__rrr button {
+  height: 22px;
+  padding: 0 7px;
+  border: 0;
+  background: transparent;
+  color: #868993;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tv-watchlist__rrr button + button {
+  border-left: 1px solid #2a2e39;
+}
+
+.tv-watchlist__rrr button.is-active {
+  background: #2962ff;
+  color: #fff;
+}
+
 .tv-watchlist__indicator-actions {
   display: inline-flex;
   align-items: center;

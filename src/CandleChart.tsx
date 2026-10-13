@@ -1,19 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BaselineSeries,
   CandlestickSeries,
   ColorType,
   CrosshairMode,
   createChart,
-  createSeriesMarkers,
-  HistogramSeries,
   LineSeries,
   LineStyle,
+  TickMarkType,
   type IChartApi,
   type ISeriesApi,
-  type ISeriesMarkersPluginApi,
   type MouseEventParams,
-  type SeriesType,
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts'
@@ -28,809 +24,197 @@ import {
 import type { Pair } from './data/config'
 import { fetchTestCandles, isTestTimeframe, type DataMode } from './testCandles'
 import {
-  CIPHER_B_COLORS,
-  CM_MACD_COLORS,
-  DEFAULT_CIPHER_B_SETTINGS,
-  DEFAULT_CM_MACD_SETTINGS,
-  DEFAULT_LA_NWE_SETTINGS,
-  DEFAULT_SMA_SETTINGS,
-  DEFAULT_TV_MACD_SETTINGS,
-  RSI_LENGTH,
-  SMA_COLORS,
-  SMA_SMOOTHING_TYPES,
-  SMA_SOURCES,
-  TV_MACD_COLORS,
-  TV_MACD_MA_TYPES,
-  calculateCipherB,
-  calculateCmMacd,
-  calculateLaNwe,
-  calculateSma,
-  calculateTradingViewRsi,
-  calculateTvMacd,
-  normalizeCipherBSettings,
-  normalizeCmMacdSettings,
-  normalizeLaNweSettings,
-  normalizeSmaSettings,
-  normalizeTvMacdSettings,
-  type CipherBSettings,
-  type CmMacdSettings,
-  type LaNweSettings,
-  type SmaSettings,
-  type TvMacdSettings,
+  DC_COLORS,
+  DEFAULT_DC_SETTINGS,
+  DEFAULT_MA_RIBBON_SETTINGS,
+  DonchianFillPrimitive,
+  MA_SOURCE_LABELS,
+  MA_SOURCES,
+  MA_TYPES,
+  calculateDonchian,
+  calculateMa,
+  normalizeDcSettings,
+  normalizeMaRibbonSettings,
+  type DcSettings,
+  type MaLineSettings,
+  type MaRibbonSettings,
 } from './indicators'
-import { RsiZoneLinePrimitive } from './rsiZoneLine'
 import type { IndicatorId, IndicatorVisibility } from './indicatorCatalog'
-import { BacktestModal } from './BacktestModal'
-import { strategyPositions, type RewardRatio, type StrategyEntrySettings, type StrategyId, type StrategyVisibility } from './strategies'
 import { subscribeLiveCandles } from './klineSocket'
 import { DrawingPrimitive } from './drawings/DrawingPrimitive'
 import { DrawingToolbar } from './drawings/DrawingToolbar'
 import { DrawingStyleBar } from './drawings/DrawingStyleBar'
 import { FibSettingsPanel } from './drawings/FibSettingsPanel'
-import { OrderBoxModal } from './drawings/OrderBoxModal'
-import type { Drawing, PositionDrawing } from './drawings/types'
 import { useChartDrawings } from './drawings/useChartDrawings'
+import { BacktestModal } from './BacktestModal'
 import { LastPriceCountdownPrimitive } from './lastPriceCountdown'
+import { buildSmaDcOrders, type SmaDcRatio } from './strategies/smaDc'
 import { formatLastPrice } from './tickers'
-import { LaNweSignalMarkersPrimitive } from './la_nweSignalMarkers'
 import './CandleChart.css'
+
+const UTC_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+function utcDate(time: Time): Date | null {
+  if (typeof time === 'number') {
+    return new Date(time * 1000)
+  }
+  if (typeof time === 'string') {
+    return new Date(`${time}T00:00:00Z`)
+  }
+  return new Date(Date.UTC(time.year, time.month - 1, time.day))
+}
+
+function padTime(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
+function formatUtcTick(time: Time, tickMarkType: TickMarkType): string {
+  const date = utcDate(time)
+  if (!date) {
+    return ''
+  }
+  if (tickMarkType === TickMarkType.Year) {
+    return String(date.getUTCFullYear())
+  }
+  if (tickMarkType === TickMarkType.Month) {
+    return UTC_MONTHS[date.getUTCMonth()] ?? ''
+  }
+  if (tickMarkType === TickMarkType.DayOfMonth) {
+    return String(date.getUTCDate())
+  }
+  const hours = padTime(date.getUTCHours())
+  const minutes = padTime(date.getUTCMinutes())
+  if (tickMarkType === TickMarkType.TimeWithSeconds) {
+    return `${hours}:${minutes}:${padTime(date.getUTCSeconds())}`
+  }
+  return `${hours}:${minutes}`
+}
+
+function formatUtcCrosshair(time: Time): string {
+  const date = utcDate(time)
+  if (!date) {
+    return ''
+  }
+  const day = date.getUTCDate()
+  const month = UTC_MONTHS[date.getUTCMonth()] ?? ''
+  const year = String(date.getUTCFullYear()).slice(2)
+  return `${day} ${month} '${year}  ${padTime(date.getUTCHours())}:${padTime(date.getUTCMinutes())} UTC`
+}
 
 type LogicalRange = {
   from: number
   to: number
 }
 
-type RsiSettings = {
-  length: number
-  outerHigh: number
-  upperBand: number
-  midline: number
-  lowerBand: number
-  outerLow: number
-}
-
-const DEFAULT_RSI_SETTINGS: RsiSettings = {
-  length: RSI_LENGTH,
-  outerHigh: 80,
-  upperBand: 70,
-  midline: 50,
-  lowerBand: 30,
-  outerLow: 20,
-}
-
-function normalizeRsiSettings(settings: RsiSettings): RsiSettings {
-  const outerLow = Math.max(0, Math.min(100, settings.outerLow))
-  const lowerBand = Math.max(outerLow, Math.min(100, settings.lowerBand))
-  const midline = Math.max(lowerBand, Math.min(100, settings.midline))
-  const upperBand = Math.max(midline, Math.min(100, settings.upperBand))
-  const outerHigh = Math.max(upperBand, Math.min(100, settings.outerHigh))
-
-  return {
-    length: Math.max(1, Math.round(settings.length)),
-    outerHigh,
-    upperBand,
-    midline,
-    lowerBand,
-    outerLow,
-  }
-}
-
-type RsiPaneSeries = {
-  series: ISeriesApi<'Line'>
-  bandTop: ISeriesApi<'Baseline'>
-  bandBottom: ISeriesApi<'Baseline'>
-  midUp: ISeriesApi<'Line'>
-  midDown: ISeriesApi<'Line'>
-  white: ISeriesApi<'Line'>
-  upper: ISeriesApi<'Line'>
-  lower: ISeriesApi<'Line'>
-  zoneLine: RsiZoneLinePrimitive
-}
-
-type CipherPaneSeries = {
-  wt1: ISeriesApi<'Baseline'>
-  wt2: ISeriesApi<'Baseline'>
-  diff: ISeriesApi<'Baseline'>
-  markers: ISeriesMarkersPluginApi<Time>
-}
-
-type MacdPaneSeries = {
-  histogram: ISeriesApi<'Histogram'>
-  macd: ISeriesApi<'Line'>
-  signal: ISeriesApi<'Line'>
-  markers: ISeriesMarkersPluginApi<Time>
-}
-
-type TvMacdPaneSeries = {
-  histogram: ISeriesApi<'Histogram'>
-  macd: ISeriesApi<'Line'>
-  signal: ISeriesApi<'Line'>
-}
-
-function applyOscillatorPaneStretch(chart: IChartApi) {
-  const panes = chart.panes()
-  panes[0]?.setStretchFactor(3)
-  for (let index = 1; index < panes.length; index += 1) {
-    panes[index]?.setStretchFactor(1)
-  }
-}
-
-function pruneEmptyOscillatorPanes(chart: IChartApi) {
-  const panes = chart.panes()
-  for (let index = panes.length - 1; index >= 1; index -= 1) {
-    if (panes[index].getSeries().length === 0) {
-      chart.removePane(index)
-    }
-  }
-}
-
-function rsiSeriesList(pane: RsiPaneSeries): Array<ISeriesApi<SeriesType>> {
-  return [
-    pane.bandTop,
-    pane.bandBottom,
-    pane.midUp,
-    pane.midDown,
-    pane.white,
-    pane.upper,
-    pane.lower,
-    pane.series,
-  ]
-}
-
-function cipherSeriesList(pane: CipherPaneSeries): Array<ISeriesApi<SeriesType>> {
-  return [pane.wt1, pane.wt2, pane.diff]
-}
-
-function macdSeriesList(pane: MacdPaneSeries): Array<ISeriesApi<SeriesType>> {
-  return [pane.histogram, pane.macd, pane.signal]
-}
-
-function tvMacdSeriesList(pane: TvMacdPaneSeries): Array<ISeriesApi<SeriesType>> {
-  return [pane.histogram, pane.macd, pane.signal]
-}
-
-function moveGroupToPane(series: Array<ISeriesApi<SeriesType>>, paneIndex: number) {
-  for (const item of series) {
-    if (item.getPane().paneIndex() !== paneIndex) {
-      item.moveToPane(paneIndex)
-    }
-  }
-}
-
-function ensurePaneCount(chart: IChartApi, count: number) {
-  while (chart.panes().length < count) {
-    chart.addPane(true)
-  }
-}
-
-function layoutOscillatorPanes(
-  chart: IChartApi,
-  rsi: RsiPaneSeries | null,
-  cipher: CipherPaneSeries | null,
-  tvMacd: TvMacdPaneSeries | null,
-  macd: MacdPaneSeries | null,
-) {
-  const groups: Array<Array<ISeriesApi<SeriesType>>> = []
-  if (rsi) {
-    groups.push(rsiSeriesList(rsi))
-  }
-  if (cipher) {
-    groups.push(cipherSeriesList(cipher))
-  }
-  if (tvMacd) {
-    groups.push(tvMacdSeriesList(tvMacd))
-  }
-  if (macd) {
-    groups.push(macdSeriesList(macd))
-  }
-
-  pruneEmptyOscillatorPanes(chart)
-  ensurePaneCount(chart, 1 + groups.length)
-
-  for (let offset = groups.length - 1; offset >= 0; offset -= 1) {
-    moveGroupToPane(groups[offset], 1 + offset)
-  }
-
-  pruneEmptyOscillatorPanes(chart)
-  applyOscillatorPaneStretch(chart)
-}
-
-function appendOscillatorPaneIndex(chart: IChartApi): number {
-  return chart.addPane(true).paneIndex()
-}
-
-function createRsiSeries(chart: IChartApi, settings: RsiSettings, paneIndex: number): RsiPaneSeries {
-  const bandTop = chart.addSeries(
-    BaselineSeries,
-    {
-      baseValue: { type: 'price', price: settings.midline },
-      topFillColor1: 'rgba(104, 33, 122, 0.26)',
-      topFillColor2: 'rgba(104, 33, 122, 0.26)',
-      topLineColor: 'rgba(0, 0, 0, 0)',
-      bottomFillColor1: 'rgba(0, 0, 0, 0)',
-      bottomFillColor2: 'rgba(0, 0, 0, 0)',
-      bottomLineColor: 'rgba(0, 0, 0, 0)',
-      lineWidth: 1,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    },
-    paneIndex,
-  )
-  const bandBottom = chart.addSeries(
-    BaselineSeries,
-    {
-      baseValue: { type: 'price', price: settings.midline },
-      topFillColor1: 'rgba(0, 0, 0, 0)',
-      topFillColor2: 'rgba(0, 0, 0, 0)',
-      topLineColor: 'rgba(0, 0, 0, 0)',
-      bottomFillColor1: 'rgba(104, 33, 122, 0.26)',
-      bottomFillColor2: 'rgba(104, 33, 122, 0.26)',
-      bottomLineColor: 'rgba(0, 0, 0, 0)',
-      lineWidth: 1,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    },
-    paneIndex,
-  )
-  const midUp = chart.addSeries(
-    LineSeries,
-    {
-      color: '#2db84d',
-      lineWidth: 2,
-      lineStyle: LineStyle.Solid,
-      crosshairMarkerVisible: false,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    },
-    paneIndex,
-  )
-  const midDown = chart.addSeries(
-    LineSeries,
-    {
-      color: '#d52d35',
-      lineWidth: 2,
-      lineStyle: LineStyle.Solid,
-      crosshairMarkerVisible: false,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    },
-    paneIndex,
-  )
-  const white = chart.addSeries(
-    LineSeries,
-    {
-      color: '#f3f4f6',
-      lineWidth: 2,
-      lineStyle: LineStyle.Solid,
-      crosshairMarkerVisible: false,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    },
-    paneIndex,
-  )
-  const upper = chart.addSeries(
-    LineSeries,
-    {
-      color: '#ff3b30',
-      lineWidth: 2,
-      lineStyle: LineStyle.Solid,
-      crosshairMarkerVisible: false,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    },
-    paneIndex,
-  )
-  const lower = chart.addSeries(
-    LineSeries,
-    {
-      color: '#ff3b30',
-      lineWidth: 2,
-      lineStyle: LineStyle.Solid,
-      crosshairMarkerVisible: false,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    },
-    paneIndex,
-  )
-  const series = chart.addSeries(
-    LineSeries,
-    {
-      color: 'rgba(243, 244, 246, 0)',
-      lineWidth: 1,
-      title: `Better RSI ${settings.length}`,
-      priceLineVisible: false,
-      lastValueVisible: true,
-      crosshairMarkerVisible: false,
-      autoscaleInfoProvider: () => ({
-        priceRange: {
-          minValue: settings.outerLow,
-          maxValue: settings.outerHigh,
-        },
-      }),
-    },
-    paneIndex,
-  )
-
-  series.createPriceLine({
-    price: settings.outerHigh,
-    color: '#a66a2c',
-    lineWidth: 1,
-    lineStyle: LineStyle.Solid,
-    axisLabelVisible: true,
-    title: '',
-  })
-  series.createPriceLine({
-    price: settings.upperBand,
-    color: '#9095a1',
-    lineWidth: 1,
-    lineStyle: LineStyle.Dashed,
-    axisLabelVisible: true,
-    title: '',
-  })
-  series.createPriceLine({
-    price: settings.midline,
-    color: '#9095a1',
-    lineWidth: 1,
-    lineStyle: LineStyle.Dashed,
-    axisLabelVisible: true,
-    title: '',
-  })
-  series.createPriceLine({
-    price: settings.lowerBand,
-    color: '#9095a1',
-    lineWidth: 1,
-    lineStyle: LineStyle.Dashed,
-    axisLabelVisible: true,
-    title: '',
-  })
-  series.createPriceLine({
-    price: settings.outerLow,
-    color: '#a66a2c',
-    lineWidth: 1,
-    lineStyle: LineStyle.Solid,
-    axisLabelVisible: true,
-    title: '',
-  })
-
-  const zoneLine = new RsiZoneLinePrimitive()
-  series.attachPrimitive(zoneLine)
-
-  return { series, bandTop, bandBottom, midUp, midDown, white, upper, lower, zoneLine }
-}
-
-function paintRsiSeries(pane: RsiPaneSeries, candles: Candle[], settings: RsiSettings) {
-  const points = calculateTradingViewRsi(candles, settings.length)
-  pane.bandTop.setData(
-    points.map((point) => ({
-      time: point.time as UTCTimestamp,
-      value: settings.upperBand,
-    })),
-  )
-  pane.bandBottom.setData(
-    points.map((point) => ({
-      time: point.time as UTCTimestamp,
-      value: settings.lowerBand,
-    })),
-  )
-  pane.midUp.setData(
-    points.map((point) =>
-      point.value >= settings.midline
-        ? { time: point.time as UTCTimestamp, value: settings.midline }
-        : { time: point.time as UTCTimestamp },
-    ),
-  )
-  pane.midDown.setData(
-    points.map((point) =>
-      point.value < settings.midline
-        ? { time: point.time as UTCTimestamp, value: settings.midline }
-        : { time: point.time as UTCTimestamp },
-    ),
-  )
-  pane.white.setData([])
-  pane.upper.setData([])
-  pane.lower.setData([])
-  pane.zoneLine.setLine(points, settings.lowerBand, settings.upperBand)
-  pane.series.setData(
-    points.map((point) => ({
-      time: point.time as UTCTimestamp,
-      value: point.value,
-    })),
+function MaLineFields({
+  label,
+  line,
+  onChange,
+}: {
+  label: string
+  line: MaLineSettings
+  onChange: (line: MaLineSettings) => void
+}) {
+  return (
+    <div className="candle-chart__ma-row">
+      <label>
+        <input
+          type="checkbox"
+          checked={line.show}
+          onChange={(event) => onChange({ ...line, show: event.target.checked })}
+        />
+        <span>{label}</span>
+      </label>
+      <select
+        aria-label={`${label} type`}
+        value={line.type}
+        disabled={!line.show}
+        onChange={(event) => onChange({ ...line, type: event.target.value as MaLineSettings['type'] })}
+      >
+        {MA_TYPES.map((type) => (
+          <option key={type} value={type}>
+            {type}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label={`${label} source`}
+        value={line.source}
+        disabled={!line.show}
+        onChange={(event) => onChange({ ...line, source: event.target.value as MaLineSettings['source'] })}
+      >
+        {MA_SOURCES.map((source) => (
+          <option key={source} value={source}>
+            {MA_SOURCE_LABELS[source]}
+          </option>
+        ))}
+      </select>
+      <input
+        aria-label={`${label} length`}
+        type="number"
+        min={1}
+        disabled={!line.show}
+        value={line.length}
+        onChange={(event) => onChange({ ...line, length: Number(event.target.value) })}
+      />
+      <input
+        aria-label={`${label} color`}
+        type="color"
+        disabled={!line.show}
+        value={line.color}
+        onChange={(event) => onChange({ ...line, color: event.target.value })}
+      />
+    </div>
   )
 }
 
-function removeRsiSeries(chart: IChartApi, pane: RsiPaneSeries) {
-  chart.removeSeries(pane.bandTop)
-  chart.removeSeries(pane.bandBottom)
-  chart.removeSeries(pane.midUp)
-  chart.removeSeries(pane.midDown)
-  chart.removeSeries(pane.white)
-  chart.removeSeries(pane.upper)
-  chart.removeSeries(pane.lower)
-  chart.removeSeries(pane.series)
-}
-
-function createCipherBSeries(
-  chart: IChartApi,
-  settings: CipherBSettings,
-  paneIndex: number,
-): CipherPaneSeries {
-  const areaBase = {
-    baseValue: { type: 'price' as const, price: 0 },
-    lineWidth: 1 as const,
-    priceLineVisible: false,
-    lastValueVisible: true,
-    crosshairMarkerVisible: false,
-  }
-
-  const wt1 = chart.addSeries(
-    BaselineSeries,
-    {
-      ...areaBase,
-      topFillColor1: CIPHER_B_COLORS.wt1Fill,
-      topFillColor2: CIPHER_B_COLORS.wt1Fill,
-      topLineColor: CIPHER_B_COLORS.wt1,
-      bottomFillColor1: CIPHER_B_COLORS.wt1Fill,
-      bottomFillColor2: CIPHER_B_COLORS.wt1Fill,
-      bottomLineColor: CIPHER_B_COLORS.wt1,
-      title: `Cipher_B_free ${settings.channelLength} ${settings.averageLength}`,
-      autoscaleInfoProvider: () => ({
-        priceRange: {
-          minValue: Math.min(settings.oversold1, settings.oversold2) - 8,
-          maxValue: Math.max(settings.overbought1, settings.overbought2) + 8,
-        },
-      }),
-    },
-    paneIndex,
-  )
-  const wt2 = chart.addSeries(
-    BaselineSeries,
-    {
-      ...areaBase,
-      topFillColor1: CIPHER_B_COLORS.wt2Fill,
-      topFillColor2: CIPHER_B_COLORS.wt2Fill,
-      topLineColor: CIPHER_B_COLORS.wt2,
-      bottomFillColor1: CIPHER_B_COLORS.wt2Fill,
-      bottomFillColor2: CIPHER_B_COLORS.wt2Fill,
-      bottomLineColor: CIPHER_B_COLORS.wt2,
-    },
-    paneIndex,
-  )
-  const diff = chart.addSeries(
-    BaselineSeries,
-    {
-      ...areaBase,
-      topFillColor1: CIPHER_B_COLORS.differenceFill,
-      topFillColor2: CIPHER_B_COLORS.differenceFill,
-      topLineColor: CIPHER_B_COLORS.difference,
-      bottomFillColor1: CIPHER_B_COLORS.differenceFill,
-      bottomFillColor2: CIPHER_B_COLORS.differenceFill,
-      bottomLineColor: CIPHER_B_COLORS.difference,
-    },
-    paneIndex,
-  )
-
-  wt1.createPriceLine({
-    price: 0,
-    color: CIPHER_B_COLORS.zero,
-    lineWidth: 1,
-    lineStyle: LineStyle.Solid,
-    axisLabelVisible: true,
-    title: '',
-  })
-  wt1.createPriceLine({
-    price: settings.overbought1,
-    color: CIPHER_B_COLORS.overbought,
-    lineWidth: 1,
-    lineStyle: LineStyle.Solid,
-    axisLabelVisible: true,
-    title: '',
-  })
-  wt1.createPriceLine({
-    price: settings.oversold1,
-    color: CIPHER_B_COLORS.oversold,
-    lineWidth: 1,
-    lineStyle: LineStyle.Solid,
-    axisLabelVisible: true,
-    title: '',
-  })
-  wt1.createPriceLine({
-    price: settings.overbought2,
-    color: CIPHER_B_COLORS.overbought,
-    lineWidth: 1,
-    lineStyle: LineStyle.Solid,
-    axisLabelVisible: true,
-    title: '',
-  })
-  wt1.createPriceLine({
-    price: settings.oversold2,
-    color: CIPHER_B_COLORS.oversold,
-    lineWidth: 1,
-    lineStyle: LineStyle.Solid,
-    axisLabelVisible: true,
-    title: '',
-  })
-
-  return { wt1, wt2, diff, markers: createSeriesMarkers(wt2, []) }
-}
-
-function paintCipherBSeries(pane: CipherPaneSeries, candles: Candle[], settings: CipherBSettings) {
-  const points = calculateCipherB(candles, settings)
-  pane.wt1.setData(
-    points.map((point) => ({
-      time: point.time as UTCTimestamp,
-      value: point.wt1,
-    })),
-  )
-  pane.wt2.setData(
-    points.map((point) => ({
-      time: point.time as UTCTimestamp,
-      value: point.wt2,
-    })),
-  )
-  pane.diff.setData(
-    points.map((point) => ({
-      time: point.time as UTCTimestamp,
-      value: point.difference,
-    })),
-  )
-  pane.markers.setMarkers(
-    points.flatMap((point) => {
-      if (!point.cross) {
-        return []
-      }
-
-      const color = point.cross === 'buy' ? CIPHER_B_COLORS.buy : CIPHER_B_COLORS.sell
-      return [
-        {
-          time: point.time as UTCTimestamp,
-          position: 'atPriceMiddle' as const,
-          shape: 'circle' as const,
-          color: CIPHER_B_COLORS.crossOutline,
-          size: 2.4,
-          price: point.wt2,
-        },
-        {
-          time: point.time as UTCTimestamp,
-          position: 'atPriceMiddle' as const,
-          shape: 'circle' as const,
-          color,
-          size: 1.6,
-          price: point.wt2,
-        },
-      ]
-    }),
-  )
-}
-
-function removeCipherBSeries(chart: IChartApi, pane: CipherPaneSeries) {
-  pane.markers.detach()
-  chart.removeSeries(pane.wt1)
-  chart.removeSeries(pane.wt2)
-  chart.removeSeries(pane.diff)
-}
-
-function createMacdSeries(chart: IChartApi, paneIndex: number): MacdPaneSeries {
-  const histogram = chart.addSeries(
-    HistogramSeries,
-    {
-      color: CM_MACD_COLORS.histFlat,
-      base: 0,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      title: 'CM_Ult_MacD_MTF',
-    },
-    paneIndex,
-  )
-  const macd = chart.addSeries(
-    LineSeries,
-    {
-      color: CM_MACD_COLORS.macdAbove,
-      lineWidth: 4,
-      priceLineVisible: false,
-      lastValueVisible: true,
-      crosshairMarkerVisible: false,
-    },
-    paneIndex,
-  )
-  const signal = chart.addSeries(
-    LineSeries,
-    {
-      color: CM_MACD_COLORS.signalColorChange,
-      lineWidth: 2,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-    },
-    paneIndex,
-  )
-
-  histogram.createPriceLine({
-    price: 0,
-    color: CM_MACD_COLORS.zero,
-    lineWidth: 2,
-    lineStyle: LineStyle.Solid,
-    axisLabelVisible: true,
-    title: '',
-  })
-
-  return { histogram, macd, signal, markers: createSeriesMarkers(signal, []) }
-}
-
-function paintMacdSeries(
-  pane: MacdPaneSeries,
+function paintMaRibbon(
+  series: { ma1: ISeriesApi<'Line'>; ma2: ISeriesApi<'Line'> },
   candles: Candle[],
-  settings: CmMacdSettings,
-  chartTimeframe: TimeframeId,
+  settings: MaRibbonSettings,
 ) {
-  const points = calculateCmMacd(candles, settings, chartTimeframe)
-
-  pane.histogram.setData(
-    settings.showHistogram
-      ? points.map((point) => ({
-          time: point.time as UTCTimestamp,
-          value: point.hist,
-          color: point.histColor,
-        }))
-      : [],
-  )
-  pane.macd.setData(
-    settings.showMacdSignal
-      ? points.map((point) => ({
-          time: point.time as UTCTimestamp,
-          value: point.macd,
-          color: point.macdColor,
-        }))
-      : [],
-  )
-  pane.signal.setData(
-    settings.showMacdSignal
-      ? points.map((point) => ({
-          time: point.time as UTCTimestamp,
-          value: point.signal,
-          color: point.signalColor,
-        }))
-      : [],
-  )
-  pane.markers.setMarkers(
-    settings.showDots
-      ? points.flatMap((point) =>
-          point.cross
-            ? [
-                {
-                  time: point.time as UTCTimestamp,
-                  position: 'atPriceMiddle' as const,
-                  shape: 'circle' as const,
-                  color: point.macdColor,
-                  size: 2,
-                  price: point.signal,
-                },
-              ]
-            : [],
-        )
-      : [],
-  )
+  const paintLine = (line: ISeriesApi<'Line'>, lineSettings: MaLineSettings) => {
+    if (!lineSettings.show) {
+      line.setData([])
+      return
+    }
+    line.setData(
+      calculateMa(candles, lineSettings).map((point) => ({
+        time: point.time as UTCTimestamp,
+        value: point.value,
+      })),
+    )
+  }
+  paintLine(series.ma1, settings.ma1)
+  paintLine(series.ma2, settings.ma2)
 }
 
-function removeMacdSeries(chart: IChartApi, pane: MacdPaneSeries) {
-  pane.markers.detach()
-  chart.removeSeries(pane.histogram)
-  chart.removeSeries(pane.macd)
-  chart.removeSeries(pane.signal)
-}
-
-function createTvMacdSeries(chart: IChartApi, paneIndex: number): TvMacdPaneSeries {
-  const histogram = chart.addSeries(
-    HistogramSeries,
-    {
-      color: TV_MACD_COLORS.histUpStrong,
-      base: 0,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      title: 'MACD',
-    },
-    paneIndex,
-  )
-  const macd = chart.addSeries(
-    LineSeries,
-    {
-      color: TV_MACD_COLORS.macd,
-      lineWidth: 2,
-      priceLineVisible: false,
-      lastValueVisible: true,
-      crosshairMarkerVisible: false,
-    },
-    paneIndex,
-  )
-  const signal = chart.addSeries(
-    LineSeries,
-    {
-      color: TV_MACD_COLORS.signal,
-      lineWidth: 2,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-    },
-    paneIndex,
-  )
-
-  histogram.createPriceLine({
-    price: 0,
-    color: TV_MACD_COLORS.zero,
-    lineWidth: 1,
-    lineStyle: LineStyle.Solid,
-    axisLabelVisible: true,
-    title: '',
-  })
-
-  return { histogram, macd, signal }
-}
-
-function paintTvMacdSeries(pane: TvMacdPaneSeries, candles: Candle[], settings: TvMacdSettings) {
-  const points = calculateTvMacd(candles, settings)
-  pane.histogram.setData(
-    points.map((point) => ({
-      time: point.time as UTCTimestamp,
-      value: point.hist,
-      color: point.histColor,
-    })),
-  )
-  pane.macd.setData(
-    points.map((point) => ({
-      time: point.time as UTCTimestamp,
-      value: point.macd,
-    })),
-  )
-  pane.signal.setData(
-    points.map((point) => ({
-      time: point.time as UTCTimestamp,
-      value: point.signal,
-    })),
-  )
-}
-
-function removeTvMacdSeries(chart: IChartApi, pane: TvMacdPaneSeries) {
-  chart.removeSeries(pane.histogram)
-  chart.removeSeries(pane.macd)
-  chart.removeSeries(pane.signal)
-}
-
-function paintSmaOverlay(
+function paintDonchianOverlay(
   series: {
-    ma: ISeriesApi<'Line'>
-    smoothing: ISeriesApi<'Line'>
-    bbUpper: ISeriesApi<'Line'>
-    bbLower: ISeriesApi<'Line'>
+    upper: ISeriesApi<'Line'>
+    lower: ISeriesApi<'Line'>
+    basis: ISeriesApi<'Line'>
+    fill: DonchianFillPrimitive
   },
   candles: Candle[],
-  settings: SmaSettings,
+  settings: DcSettings,
 ) {
-  const points = calculateSma(candles, settings)
-  series.ma.setData(
+  const points = calculateDonchian(candles, settings)
+  const toLine = (pick: (point: (typeof points)[number]) => number) =>
     points.map((point) => ({
       time: point.time as UTCTimestamp,
-      value: point.sma,
+      value: pick(point),
+    }))
+
+  series.upper.setData(toLine((point) => point.upper))
+  series.lower.setData(toLine((point) => point.lower))
+  series.basis.setData(toLine((point) => point.basis))
+  series.fill.setBands(
+    points.map((point) => ({
+      time: point.time as UTCTimestamp,
+      upper: point.upper,
+      lower: point.lower,
     })),
-  )
-  series.smoothing.setData(
-    points.map((point) =>
-      point.smoothing === null
-        ? { time: point.time as UTCTimestamp }
-        : { time: point.time as UTCTimestamp, value: point.smoothing },
-    ),
-  )
-  series.bbUpper.setData(
-    points.map((point) =>
-      point.bbUpper === null
-        ? { time: point.time as UTCTimestamp }
-        : { time: point.time as UTCTimestamp, value: point.bbUpper },
-    ),
-  )
-  series.bbLower.setData(
-    points.map((point) =>
-      point.bbLower === null
-        ? { time: point.time as UTCTimestamp }
-        : { time: point.time as UTCTimestamp, value: point.bbLower },
-    ),
   )
 }
 
@@ -962,66 +346,41 @@ export function CandleChart({
   pair,
   timeframe,
   indicatorVisibility,
-  strategyVisibility,
-  strategyEntries,
-  rewardRatio,
   dataMode,
-  onRewardRatioChange,
-  backtestStrategy,
-  onBacktestClose,
   settingsOpen,
   settingsTick,
+  smaDcEnabled,
+  smaDcRatio,
+  backtestOpen,
+  onSmaDcRatioChange,
+  onBacktestClose,
   onTimeframeChange,
   onSettingsOpenChange,
 }: {
   pair: Pair
   timeframe: TimeframeId
   indicatorVisibility: IndicatorVisibility
-  strategyVisibility: StrategyVisibility
-  strategyEntries: StrategyEntrySettings
-  rewardRatio: RewardRatio
   dataMode: DataMode
-  onRewardRatioChange: (ratio: RewardRatio) => void
-  backtestStrategy: StrategyId | null
-  onBacktestClose: () => void
   settingsOpen: IndicatorId | null
   settingsTick: number
+  smaDcEnabled: boolean
+  smaDcRatio: SmaDcRatio
+  backtestOpen: boolean
+  onSmaDcRatioChange: (ratio: SmaDcRatio) => void
+  onBacktestClose: () => void
   onTimeframeChange: (timeframe: TimeframeId) => void
   onSettingsOpenChange: (indicator: IndicatorId | null) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
-  const rsiSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const rsiBandTopRef = useRef<ISeriesApi<'Baseline'> | null>(null)
-  const rsiBandBottomRef = useRef<ISeriesApi<'Baseline'> | null>(null)
-  const rsiMidUpRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const rsiMidDownRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const rsiWhiteRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const rsiUpperRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const rsiLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const rsiZoneLineRef = useRef<RsiZoneLinePrimitive | null>(null)
-  const cipherWt1Ref = useRef<ISeriesApi<'Baseline'> | null>(null)
-  const cipherWt2Ref = useRef<ISeriesApi<'Baseline'> | null>(null)
-  const cipherDiffRef = useRef<ISeriesApi<'Baseline'> | null>(null)
-  const cipherMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
-  const macdHistogramRef = useRef<ISeriesApi<'Histogram'> | null>(null)
-  const macdLineRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const macdSignalRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const macdMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
-  const tvMacdHistogramRef = useRef<ISeriesApi<'Histogram'> | null>(null)
-  const tvMacdLineRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const tvMacdSignalRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const la_nweUpperRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const la_nweLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const smaMaRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const smaSmoothingRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const smaBbUpperRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const smaBbLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
-  const la_nweMarkersRef = useRef<LaNweSignalMarkersPrimitive | null>(null)
+  const ma1Ref = useRef<ISeriesApi<'Line'> | null>(null)
+  const ma2Ref = useRef<ISeriesApi<'Line'> | null>(null)
+  const dcUpperRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const dcLowerRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const dcBasisRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const dcFillRef = useRef<DonchianFillPrimitive | null>(null)
   const drawingPrimitiveRef = useRef<DrawingPrimitive | null>(null)
-  const strategyPrimitiveRef = useRef<DrawingPrimitive | null>(null)
-  const strategyDrawingsRef = useRef<Drawing[]>([])
   const candlesRef = useRef<Candle[]>([])
   const countdownRef = useRef<LastPriceCountdownPrimitive | null>(null)
   const initialRangeRef = useRef<LogicalRange | null>(null)
@@ -1032,41 +391,21 @@ export function CandleChart({
   const [chartRange, setChartRange] = useState<CandleRange | null>(null)
   const [rangeOpen, setRangeOpen] = useState(false)
   const [hoverCandle, setHoverCandle] = useState<Candle | null>(null)
-  const [orderBox, setOrderBox] = useState<PositionDrawing | null>(null)
-  const [rsiSettings, setRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
-  const [draftRsiSettings, setDraftRsiSettings] = useState<RsiSettings>(DEFAULT_RSI_SETTINGS)
-  const [la_nweSettings, setLaNweSettings] = useState<LaNweSettings>(DEFAULT_LA_NWE_SETTINGS)
-  const [draftLaNweSettings, setDraftLaNweSettings] = useState<LaNweSettings>(DEFAULT_LA_NWE_SETTINGS)
-  const [cipherSettings, setCipherSettings] = useState<CipherBSettings>(DEFAULT_CIPHER_B_SETTINGS)
-  const [draftCipherSettings, setDraftCipherSettings] = useState<CipherBSettings>(DEFAULT_CIPHER_B_SETTINGS)
-  const [macdSettings, setMacdSettings] = useState<CmMacdSettings>(DEFAULT_CM_MACD_SETTINGS)
-  const [draftMacdSettings, setDraftMacdSettings] = useState<CmMacdSettings>(DEFAULT_CM_MACD_SETTINGS)
-  const [tvMacdSettings, setTvMacdSettings] = useState<TvMacdSettings>(DEFAULT_TV_MACD_SETTINGS)
-  const [draftTvMacdSettings, setDraftTvMacdSettings] = useState<TvMacdSettings>(DEFAULT_TV_MACD_SETTINGS)
-  const [smaSettings, setSmaSettings] = useState<SmaSettings>(DEFAULT_SMA_SETTINGS)
-  const [draftSmaSettings, setDraftSmaSettings] = useState<SmaSettings>(DEFAULT_SMA_SETTINGS)
+  const [maRibbonSettings, setMaRibbonSettings] = useState<MaRibbonSettings>(DEFAULT_MA_RIBBON_SETTINGS)
+  const [draftMaRibbonSettings, setDraftMaRibbonSettings] = useState<MaRibbonSettings>(DEFAULT_MA_RIBBON_SETTINGS)
+  const [dcSettings, setDcSettings] = useState<DcSettings>(DEFAULT_DC_SETTINGS)
+  const [draftDcSettings, setDraftDcSettings] = useState<DcSettings>(DEFAULT_DC_SETTINGS)
   const indicatorVisibilityRef = useRef(indicatorVisibility)
-  const strategyVisibilityRef = useRef(strategyVisibility)
-  const strategyEntriesRef = useRef(strategyEntries)
-  const rewardRatioRef = useRef(rewardRatio)
-  const la_nweSettingsRef = useRef(la_nweSettings)
-  const rsiSettingsRef = useRef(rsiSettings)
-  const cipherSettingsRef = useRef(cipherSettings)
-  const macdSettingsRef = useRef(macdSettings)
-  const tvMacdSettingsRef = useRef(tvMacdSettings)
-  const smaSettingsRef = useRef(smaSettings)
-  const timeframeRef = useRef(timeframe)
+  const maRibbonSettingsRef = useRef(maRibbonSettings)
+  const dcSettingsRef = useRef(dcSettings)
   indicatorVisibilityRef.current = indicatorVisibility
-  strategyVisibilityRef.current = strategyVisibility
-  strategyEntriesRef.current = strategyEntries
-  rewardRatioRef.current = rewardRatio
-  la_nweSettingsRef.current = la_nweSettings
-  rsiSettingsRef.current = rsiSettings
-  cipherSettingsRef.current = cipherSettings
-  macdSettingsRef.current = macdSettings
-  tvMacdSettingsRef.current = tvMacdSettings
-  smaSettingsRef.current = smaSettings
-  timeframeRef.current = timeframe
+  maRibbonSettingsRef.current = maRibbonSettings
+  dcSettingsRef.current = dcSettings
+
+  const smaDcOrders = useMemo(
+    () => (smaDcEnabled ? buildSmaDcOrders(loadedCandles, maRibbonSettings, smaDcRatio) : []),
+    [smaDcEnabled, loadedCandles, maRibbonSettings, smaDcRatio],
+  )
 
   const {
     tool: drawingTool,
@@ -1086,55 +425,8 @@ export function CandleChart({
     seriesRef,
     candlesRef,
     primitiveRef: drawingPrimitiveRef,
+    strategyDrawings: smaDcOrders,
   })
-
-  const getRsiPane = (): RsiPaneSeries | null => {
-    const series = rsiSeriesRef.current
-    const bandTop = rsiBandTopRef.current
-    const bandBottom = rsiBandBottomRef.current
-    const midUp = rsiMidUpRef.current
-    const midDown = rsiMidDownRef.current
-    const white = rsiWhiteRef.current
-    const upper = rsiUpperRef.current
-    const lower = rsiLowerRef.current
-    const zoneLine = rsiZoneLineRef.current
-    if (!series || !bandTop || !bandBottom || !midUp || !midDown || !white || !upper || !lower || !zoneLine) {
-      return null
-    }
-    return { series, bandTop, bandBottom, midUp, midDown, white, upper, lower, zoneLine }
-  }
-
-  const getCipherPane = (): CipherPaneSeries | null => {
-    const wt1 = cipherWt1Ref.current
-    const wt2 = cipherWt2Ref.current
-    const diff = cipherDiffRef.current
-    const markers = cipherMarkersRef.current
-    if (!wt1 || !wt2 || !diff || !markers) {
-      return null
-    }
-    return { wt1, wt2, diff, markers }
-  }
-
-  const getMacdPane = (): MacdPaneSeries | null => {
-    const histogram = macdHistogramRef.current
-    const macd = macdLineRef.current
-    const signal = macdSignalRef.current
-    const markers = macdMarkersRef.current
-    if (!histogram || !macd || !signal || !markers) {
-      return null
-    }
-    return { histogram, macd, signal, markers }
-  }
-
-  const getTvMacdPane = (): TvMacdPaneSeries | null => {
-    const histogram = tvMacdHistogramRef.current
-    const macd = tvMacdLineRef.current
-    const signal = tvMacdSignalRef.current
-    if (!histogram || !macd || !signal) {
-      return null
-    }
-    return { histogram, macd, signal }
-  }
 
   const shiftRange = (direction: -1 | 1) => {
     const chart = chartRef.current
@@ -1171,9 +463,6 @@ export function CandleChart({
     const chart = chartRef.current
     const initialRange = initialRangeRef.current
     const series = seriesRef.current
-    const rsiSeries = rsiSeriesRef.current
-    const cipherSeries = cipherWt1Ref.current
-    const macdSeries = macdHistogramRef.current
     if (!chart || !initialRange || !series) {
       return
     }
@@ -1181,10 +470,6 @@ export function CandleChart({
     chart.timeScale().setVisibleLogicalRange(initialRange)
     requestAnimationFrame(() => {
       series.priceScale().applyOptions({ autoScale: true })
-      rsiSeries?.priceScale().applyOptions({ autoScale: true })
-      cipherSeries?.priceScale().applyOptions({ autoScale: true })
-      tvMacdHistogramRef.current?.priceScale().applyOptions({ autoScale: true })
-      macdSeries?.priceScale().applyOptions({ autoScale: true })
     })
   }
 
@@ -1214,6 +499,10 @@ export function CandleChart({
         timeVisible: true,
         secondsVisible: false,
         minBarSpacing: 2,
+        tickMarkFormatter: formatUtcTick,
+      },
+      localization: {
+        timeFormatter: formatUtcCrosshair,
       },
       crosshair: {
         mode: CrosshairMode.Normal,
@@ -1236,100 +525,71 @@ export function CandleChart({
     })
     const countdown = new LastPriceCountdownPrimitive(timeframe)
     series.attachPrimitive(countdown)
-    const la_nweMarkers = new LaNweSignalMarkersPrimitive()
-    series.attachPrimitive(la_nweMarkers)
+    const dcFill = new DonchianFillPrimitive()
+    series.attachPrimitive(dcFill)
     const drawings = new DrawingPrimitive()
     series.attachPrimitive(drawings)
-    const strategyDrawings = new DrawingPrimitive()
-    series.attachPrimitive(strategyDrawings)
     seriesRef.current = series
     countdownRef.current = countdown
-    la_nweMarkersRef.current = la_nweMarkers
+    dcFillRef.current = dcFill
     drawingPrimitiveRef.current = drawings
-    strategyPrimitiveRef.current = strategyDrawings
 
-    const la_nweUpper = chart.addSeries(LineSeries, {
-      color: '#00897b',
-      lineWidth: 2,
-      lineStyle: LineStyle.Dashed,
-      crosshairMarkerVisible: false,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    })
-    const la_nweLower = chart.addSeries(LineSeries, {
-      color: '#f23645',
-      lineWidth: 2,
-      lineStyle: LineStyle.Dashed,
-      crosshairMarkerVisible: false,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    })
-    la_nweUpperRef.current = la_nweUpper
-    la_nweLowerRef.current = la_nweLower
-
-    const smaLineOptions = {
+    const maLineOptions = {
       lineWidth: 2 as const,
+      crosshairMarkerVisible: false,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      visible: false,
+    }
+    const ma1 = chart.addSeries(LineSeries, {
+      ...maLineOptions,
+      color: DEFAULT_MA_RIBBON_SETTINGS.ma1.color,
+      title: `MA ${DEFAULT_MA_RIBBON_SETTINGS.ma1.length}`,
+    })
+    const ma2 = chart.addSeries(LineSeries, {
+      ...maLineOptions,
+      color: DEFAULT_MA_RIBBON_SETTINGS.ma2.color,
+      title: `MA ${DEFAULT_MA_RIBBON_SETTINGS.ma2.length}`,
+    })
+    ma1Ref.current = ma1
+    ma2Ref.current = ma2
+
+    const dcLineOptions = {
+      lineWidth: 1 as const,
       crosshairMarkerVisible: false,
       priceLineVisible: false,
       lastValueVisible: false,
       visible: false,
     }
-    const smaMa = chart.addSeries(LineSeries, {
-      ...smaLineOptions,
-      color: SMA_COLORS.ma,
+    const dcUpper = chart.addSeries(LineSeries, {
+      ...dcLineOptions,
+      color: DC_COLORS.upper,
+    })
+    const dcLower = chart.addSeries(LineSeries, {
+      ...dcLineOptions,
+      color: DC_COLORS.lower,
+    })
+    const dcBasis = chart.addSeries(LineSeries, {
+      ...dcLineOptions,
+      color: DC_COLORS.basis,
       lastValueVisible: true,
-      title: `SMA ${DEFAULT_SMA_SETTINGS.length}`,
+      title: `DC ${DEFAULT_DC_SETTINGS.length}`,
     })
-    const smaSmoothing = chart.addSeries(LineSeries, {
-      ...smaLineOptions,
-      color: SMA_COLORS.smoothing,
-    })
-    const smaBbUpper = chart.addSeries(LineSeries, {
-      ...smaLineOptions,
-      color: SMA_COLORS.band,
-    })
-    const smaBbLower = chart.addSeries(LineSeries, {
-      ...smaLineOptions,
-      color: SMA_COLORS.band,
-    })
-    smaMaRef.current = smaMa
-    smaSmoothingRef.current = smaSmoothing
-    smaBbUpperRef.current = smaBbUpper
-    smaBbLowerRef.current = smaBbLower
+    dcUpperRef.current = dcUpper
+    dcLowerRef.current = dcLower
+    dcBasisRef.current = dcBasis
     setChartReady(true)
 
     return () => {
       setChartReady(false)
       seriesRef.current = null
-      rsiSeriesRef.current = null
-      rsiBandTopRef.current = null
-      rsiBandBottomRef.current = null
-      rsiMidUpRef.current = null
-      rsiMidDownRef.current = null
-      rsiWhiteRef.current = null
-      rsiUpperRef.current = null
-      rsiLowerRef.current = null
-      rsiZoneLineRef.current = null
-      cipherWt1Ref.current = null
-      cipherWt2Ref.current = null
-      cipherDiffRef.current = null
-      cipherMarkersRef.current = null
-      macdHistogramRef.current = null
-      macdLineRef.current = null
-      macdSignalRef.current = null
-      macdMarkersRef.current = null
-      tvMacdHistogramRef.current = null
-      tvMacdLineRef.current = null
-      tvMacdSignalRef.current = null
-      la_nweUpperRef.current = null
-      la_nweLowerRef.current = null
-      smaMaRef.current = null
-      smaSmoothingRef.current = null
-      smaBbUpperRef.current = null
-      smaBbLowerRef.current = null
+      ma1Ref.current = null
+      ma2Ref.current = null
+      dcUpperRef.current = null
+      dcLowerRef.current = null
+      dcBasisRef.current = null
+      dcFillRef.current = null
       drawingPrimitiveRef.current = null
-      strategyPrimitiveRef.current = null
-      la_nweMarkersRef.current = null
       countdownRef.current = null
       chartRef.current = null
       chart.remove()
@@ -1389,155 +649,21 @@ export function CandleChart({
   }, [chartReady])
 
   useEffect(() => {
-    const chart = chartRef.current
-    if (!chartReady || !chart || !indicatorVisibility.rsi) {
-      return
-    }
-
-    const pane = createRsiSeries(chart, rsiSettings, appendOscillatorPaneIndex(chart))
-    rsiSeriesRef.current = pane.series
-    rsiBandTopRef.current = pane.bandTop
-    rsiBandBottomRef.current = pane.bandBottom
-    rsiMidUpRef.current = pane.midUp
-    rsiMidDownRef.current = pane.midDown
-    rsiWhiteRef.current = pane.white
-    rsiUpperRef.current = pane.upper
-    rsiLowerRef.current = pane.lower
-    rsiZoneLineRef.current = pane.zoneLine
-    if (candlesRef.current.length > 0) {
-      paintRsiSeries(pane, candlesRef.current, rsiSettings)
-    }
-    layoutOscillatorPanes(chart, pane, getCipherPane(), getTvMacdPane(), getMacdPane())
-
-    return () => {
-      const activeChart = chartRef.current
-      if (rsiSeriesRef.current === pane.series) {
-        rsiSeriesRef.current = null
-        rsiBandTopRef.current = null
-        rsiBandBottomRef.current = null
-        rsiMidUpRef.current = null
-        rsiMidDownRef.current = null
-        rsiWhiteRef.current = null
-        rsiUpperRef.current = null
-        rsiLowerRef.current = null
-        rsiZoneLineRef.current = null
-      }
-      if (activeChart) {
-        removeRsiSeries(activeChart, pane)
-        layoutOscillatorPanes(activeChart, null, getCipherPane(), getTvMacdPane(), getMacdPane())
-      }
-    }
-  }, [chartReady, indicatorVisibility.rsi, rsiSettings])
-
-  useEffect(() => {
-    const chart = chartRef.current
-    if (!chartReady || !chart || !indicatorVisibility.cipherB) {
-      return
-    }
-
-    const pane = createCipherBSeries(chart, cipherSettings, appendOscillatorPaneIndex(chart))
-    cipherWt1Ref.current = pane.wt1
-    cipherWt2Ref.current = pane.wt2
-    cipherDiffRef.current = pane.diff
-    cipherMarkersRef.current = pane.markers
-    if (candlesRef.current.length > 0) {
-      paintCipherBSeries(pane, candlesRef.current, cipherSettings)
-    }
-    layoutOscillatorPanes(chart, getRsiPane(), pane, getTvMacdPane(), getMacdPane())
-
-    return () => {
-      const activeChart = chartRef.current
-      if (cipherWt1Ref.current === pane.wt1) {
-        cipherWt1Ref.current = null
-        cipherWt2Ref.current = null
-        cipherDiffRef.current = null
-        cipherMarkersRef.current = null
-      }
-      if (activeChart) {
-        removeCipherBSeries(activeChart, pane)
-        layoutOscillatorPanes(activeChart, getRsiPane(), null, getTvMacdPane(), getMacdPane())
-      }
-    }
-  }, [chartReady, indicatorVisibility.cipherB, cipherSettings])
-
-  useEffect(() => {
-    const chart = chartRef.current
-    if (!chartReady || !chart || !indicatorVisibility.macd) {
-      return
-    }
-
-    const pane = createTvMacdSeries(chart, appendOscillatorPaneIndex(chart))
-    tvMacdHistogramRef.current = pane.histogram
-    tvMacdLineRef.current = pane.macd
-    tvMacdSignalRef.current = pane.signal
-    if (candlesRef.current.length > 0) {
-      paintTvMacdSeries(pane, candlesRef.current, tvMacdSettings)
-    }
-    layoutOscillatorPanes(chart, getRsiPane(), getCipherPane(), pane, getMacdPane())
-
-    return () => {
-      const activeChart = chartRef.current
-      if (tvMacdHistogramRef.current === pane.histogram) {
-        tvMacdHistogramRef.current = null
-        tvMacdLineRef.current = null
-        tvMacdSignalRef.current = null
-      }
-      if (activeChart) {
-        removeTvMacdSeries(activeChart, pane)
-        layoutOscillatorPanes(activeChart, getRsiPane(), getCipherPane(), null, getMacdPane())
-      }
-    }
-  }, [chartReady, indicatorVisibility.macd, tvMacdSettings])
-
-  useEffect(() => {
-    const chart = chartRef.current
-    if (!chartReady || !chart || !indicatorVisibility.cmMacd) {
-      return
-    }
-
-    const pane = createMacdSeries(chart, appendOscillatorPaneIndex(chart))
-    macdHistogramRef.current = pane.histogram
-    macdLineRef.current = pane.macd
-    macdSignalRef.current = pane.signal
-    macdMarkersRef.current = pane.markers
-    if (candlesRef.current.length > 0) {
-      paintMacdSeries(pane, candlesRef.current, macdSettings, timeframeRef.current)
-    }
-    layoutOscillatorPanes(chart, getRsiPane(), getCipherPane(), getTvMacdPane(), pane)
-
-    return () => {
-      const activeChart = chartRef.current
-      if (macdHistogramRef.current === pane.histogram) {
-        macdHistogramRef.current = null
-        macdLineRef.current = null
-        macdSignalRef.current = null
-        macdMarkersRef.current = null
-      }
-      if (activeChart) {
-        removeMacdSeries(activeChart, pane)
-        layoutOscillatorPanes(activeChart, getRsiPane(), getCipherPane(), getTvMacdPane(), null)
-      }
-    }
-  }, [chartReady, indicatorVisibility.cmMacd, macdSettings])
-
-  useEffect(() => {
     const series = seriesRef.current
-    const la_nweUpper = la_nweUpperRef.current
-    const la_nweLower = la_nweLowerRef.current
-    const la_nweMarkers = la_nweMarkersRef.current
-    const smaMa = smaMaRef.current
-    const smaSmoothing = smaSmoothingRef.current
-    const smaBbUpper = smaBbUpperRef.current
-    const smaBbLower = smaBbLowerRef.current
+    const ma1 = ma1Ref.current
+    const ma2 = ma2Ref.current
+    const dcUpper = dcUpperRef.current
+    const dcLower = dcLowerRef.current
+    const dcBasis = dcBasisRef.current
+    const dcFill = dcFillRef.current
     if (
       !series ||
-      !la_nweUpper ||
-      !la_nweLower ||
-      !la_nweMarkers ||
-      !smaMa ||
-      !smaSmoothing ||
-      !smaBbUpper ||
-      !smaBbLower
+      !ma1 ||
+      !ma2 ||
+      !dcUpper ||
+      !dcLower ||
+      !dcBasis ||
+      !dcFill
     ) {
       return
     }
@@ -1549,143 +675,27 @@ export function CandleChart({
     setError(null)
     setLoading(true)
 
-    const readRsiPane = (): RsiPaneSeries | null => {
-      const rsiSeries = rsiSeriesRef.current
-      const bandTop = rsiBandTopRef.current
-      const bandBottom = rsiBandBottomRef.current
-      const midUp = rsiMidUpRef.current
-      const midDown = rsiMidDownRef.current
-      const white = rsiWhiteRef.current
-      const upper = rsiUpperRef.current
-      const lower = rsiLowerRef.current
-      const zoneLine = rsiZoneLineRef.current
-      if (!rsiSeries || !bandTop || !bandBottom || !midUp || !midDown || !white || !upper || !lower || !zoneLine) {
-        return null
-      }
-      return { series: rsiSeries, bandTop, bandBottom, midUp, midDown, white, upper, lower, zoneLine }
-    }
-
-    const readCipherPane = (): CipherPaneSeries | null => {
-      const wt1 = cipherWt1Ref.current
-      const wt2 = cipherWt2Ref.current
-      const diff = cipherDiffRef.current
-      const markers = cipherMarkersRef.current
-      if (!wt1 || !wt2 || !diff || !markers) {
-        return null
-      }
-      return { wt1, wt2, diff, markers }
-    }
-
-    const readMacdPane = (): MacdPaneSeries | null => {
-      const histogram = macdHistogramRef.current
-      const macd = macdLineRef.current
-      const signal = macdSignalRef.current
-      const markers = macdMarkersRef.current
-      if (!histogram || !macd || !signal || !markers) {
-        return null
-      }
-      return { histogram, macd, signal, markers }
-    }
-
-    const paintRsi = (candles: Candle[]) => {
-      const pane = readRsiPane()
-      if (!indicatorVisibilityRef.current.rsi || !pane) {
+    const paintRibbon = (candles: Candle[]) => {
+      if (!indicatorVisibilityRef.current.maRibbon) {
+        ma1.setData([])
+        ma2.setData([])
         return
       }
-      paintRsiSeries(pane, candles, rsiSettingsRef.current)
+      paintMaRibbon({ ma1, ma2 }, candles, maRibbonSettingsRef.current)
     }
 
-    const paintCipherB = (candles: Candle[]) => {
-      const pane = readCipherPane()
-      if (!indicatorVisibilityRef.current.cipherB || !pane) {
+    const paintDc = (candles: Candle[]) => {
+      if (!indicatorVisibilityRef.current.dc) {
+        dcUpper.setData([])
+        dcLower.setData([])
+        dcBasis.setData([])
+        dcFill.setBands([])
         return
       }
-      paintCipherBSeries(pane, candles, cipherSettingsRef.current)
-    }
-
-    const paintMacd = (candles: Candle[]) => {
-      const pane = readMacdPane()
-      if (!indicatorVisibilityRef.current.cmMacd || !pane) {
-        return
-      }
-      paintMacdSeries(pane, candles, macdSettingsRef.current, timeframeRef.current)
-    }
-
-    const paintTvMacd = (candles: Candle[]) => {
-      const histogram = tvMacdHistogramRef.current
-      const macd = tvMacdLineRef.current
-      const signal = tvMacdSignalRef.current
-      if (!indicatorVisibilityRef.current.macd || !histogram || !macd || !signal) {
-        return
-      }
-      paintTvMacdSeries({ histogram, macd, signal }, candles, tvMacdSettingsRef.current)
-    }
-
-    const paintLaNwe = (candles: Candle[]) => {
-      if (!indicatorVisibilityRef.current.la_nwe) {
-        la_nweMarkers.setMarkers([])
-        return
-      }
-
-      const result = calculateLaNwe(candles, la_nweSettingsRef.current)
-      la_nweUpper.setData(
-        result.points.map((point) => ({
-          time: point.time as UTCTimestamp,
-          value: point.upper,
-        })),
-      )
-      la_nweLower.setData(
-        result.points.map((point) => ({
-          time: point.time as UTCTimestamp,
-          value: point.lower,
-        })),
-      )
-      la_nweMarkers.setMarkers(
-        result.crosses.map((cross) =>
-          cross.direction === 'down'
-            ? {
-                time: cross.time as UTCTimestamp,
-                price: cross.price,
-                direction: 'down',
-                color: '#f23645',
-              }
-            : {
-                time: cross.time as UTCTimestamp,
-                price: cross.price,
-                direction: 'up',
-                color: '#00897b',
-              },
-        ),
-      )
-    }
-
-    const paintStrategies = (candles: Candle[]) => {
-      const primitive = strategyPrimitiveRef.current
-      if (!primitive) {
-        return
-      }
-      const drawings = strategyPositions(strategyVisibilityRef.current, {
+      paintDonchianOverlay(
+        { upper: dcUpper, lower: dcLower, basis: dcBasis, fill: dcFill },
         candles,
-        rewardRatio: rewardRatioRef.current,
-        laNweSettings: la_nweSettingsRef.current,
-        entries: strategyEntriesRef.current,
-      })
-      strategyDrawingsRef.current = drawings
-      primitive.setState({ drawings })
-    }
-
-    const paintSma = (candles: Candle[]) => {
-      if (!indicatorVisibilityRef.current.sma) {
-        smaMa.setData([])
-        smaSmoothing.setData([])
-        smaBbUpper.setData([])
-        smaBbLower.setData([])
-        return
-      }
-      paintSmaOverlay(
-        { ma: smaMa, smoothing: smaSmoothing, bbUpper: smaBbUpper, bbLower: smaBbLower },
-        candles,
-        smaSettingsRef.current,
+        dcSettingsRef.current,
       )
     }
 
@@ -1699,13 +709,8 @@ export function CandleChart({
           close: candle.close,
         })),
       )
-      paintRsi(candles)
-      paintCipherB(candles)
-      paintTvMacd(candles)
-      paintMacd(candles)
-      paintLaNwe(candles)
-      paintSma(candles)
-      paintStrategies(candles)
+      paintRibbon(candles)
+      paintDc(candles)
     }
 
     const paintLive = (candles: Candle[], candle: Candle) => {
@@ -1716,13 +721,8 @@ export function CandleChart({
         low: candle.low,
         close: candle.close,
       })
-      paintRsi(candles)
-      paintCipherB(candles)
-      paintTvMacd(candles)
-      paintMacd(candles)
-      paintLaNwe(candles)
-      paintSma(candles)
-      paintStrategies(candles)
+      paintRibbon(candles)
+      paintDc(candles)
       const last = candles.at(-1) ?? null
       setHoverCandle((current) => {
         if (!current || !last || current.time === last.time) {
@@ -1780,12 +780,9 @@ export function CandleChart({
             if (chartRange && candle.time > chartRange.to) {
               return
             }
-            const count = candles.length
             if (applyLiveCandle(candles, candle)) {
               candlesRef.current = candles
-              if (candles.length !== count) {
-                setLoadedCandles([...candles])
-              }
+              setLoadedCandles([...candles])
               paintLive(candles, candle)
             }
           },
@@ -1818,376 +815,128 @@ export function CandleChart({
   }, [pair, timeframe, chartReady, chartRange, dataMode])
 
   useEffect(() => {
-    const la_nweUpper = la_nweUpperRef.current
-    const la_nweLower = la_nweLowerRef.current
-    const la_nweMarkers = la_nweMarkersRef.current
+    const ma1 = ma1Ref.current
+    const ma2 = ma2Ref.current
     const candles = candlesRef.current
-    if (!la_nweUpper || !la_nweLower || !la_nweMarkers || candles.length === 0) {
+    if (!ma1 || !ma2) {
       return
     }
 
-    const result = calculateLaNwe(candles, la_nweSettings)
-    la_nweUpper.setData(
-      result.points.map((point) => ({
-        time: point.time as UTCTimestamp,
-        value: point.upper,
-      })),
-    )
-    la_nweLower.setData(
-      result.points.map((point) => ({
-        time: point.time as UTCTimestamp,
-        value: point.lower,
-      })),
-    )
-    la_nweMarkers.setMarkers(
-      result.crosses.map((cross) =>
-        cross.direction === 'down'
-          ? {
-              time: cross.time as UTCTimestamp,
-              price: cross.price,
-              direction: 'down',
-              color: '#f23645',
-            }
-          : {
-              time: cross.time as UTCTimestamp,
-              price: cross.price,
-              direction: 'up',
-              color: '#00897b',
-            },
-      ),
-    )
-  }, [la_nweSettings, chartReady, indicatorVisibility])
-
-  useEffect(() => {
-    const primitive = strategyPrimitiveRef.current
-    if (!chartReady || !primitive) {
-      return
+    const visible = indicatorVisibility.maRibbon
+    const applyLine = (series: ISeriesApi<'Line'>, line: MaLineSettings) => {
+      series.applyOptions({
+        visible: visible && line.show,
+        color: line.color,
+        title: `MA ${line.length}`,
+      })
     }
-    const candles = candlesRef.current
-    if (candles.length === 0) {
-      strategyDrawingsRef.current = []
-      primitive.setState({ drawings: [] })
-      return
-    }
-    const drawings = strategyPositions(strategyVisibility, {
-      candles,
-      rewardRatio,
-      laNweSettings: la_nweSettings,
-      entries: strategyEntries,
-    })
-    strategyDrawingsRef.current = drawings
-    primitive.setState({ drawings })
-  }, [strategyVisibility, strategyEntries, rewardRatio, la_nweSettings, chartReady, pair, timeframe])
-
-  useEffect(() => {
-    const chart = chartRef.current
-    if (!chartReady || !chart) {
-      return
-    }
-    const element = chart.chartElement()
-
-    const localPoint = (event: MouseEvent) => {
-      const rect = element.getBoundingClientRect()
-      return { x: event.clientX - rect.left, y: event.clientY - rect.top }
-    }
-
-    let press: { x: number; y: number } | null = null
-
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0) {
-        return
-      }
-      const local = localPoint(event)
-      press = local
-      const hit = strategyPrimitiveRef.current?.hitDrawing(local.x, local.y)
-      if (!hit) {
-        return
-      }
-      strategyPrimitiveRef.current?.setState({ selectedId: hit.id })
-      event.preventDefault()
-      event.stopPropagation()
-    }
-
-    const onPointerUp = (event: PointerEvent) => {
-      if (event.button !== 0) {
-        return
-      }
-      const start = press
-      press = null
-      const local = localPoint(event)
-      if (start && Math.hypot(local.x - start.x, local.y - start.y) > 5) {
-        return
-      }
-      const hit = strategyPrimitiveRef.current?.hitDrawing(local.x, local.y)
-      if (!hit) {
-        strategyPrimitiveRef.current?.setState({ selectedId: null })
-      }
-    }
-
-    const onDoubleClick = (event: MouseEvent) => {
-      const local = localPoint(event)
-      const hit = strategyPrimitiveRef.current?.hitDrawing(local.x, local.y)
-      const drawing = hit ? strategyDrawingsRef.current.find((item) => item.id === hit.id) : null
-      if (drawing?.type !== 'longPosition' && drawing?.type !== 'shortPosition') {
-        return
-      }
-      event.preventDefault()
-      event.stopPropagation()
-      setOrderBox(drawing)
-    }
-
-    element.addEventListener('pointerdown', onPointerDown, true)
-    element.addEventListener('pointerup', onPointerUp, true)
-    element.addEventListener('dblclick', onDoubleClick, true)
-    return () => {
-      element.removeEventListener('pointerdown', onPointerDown, true)
-      element.removeEventListener('pointerup', onPointerUp, true)
-      element.removeEventListener('dblclick', onDoubleClick, true)
-    }
-  }, [chartReady])
-
-  useEffect(() => {
-    const smaMa = smaMaRef.current
-    const smaSmoothing = smaSmoothingRef.current
-    const smaBbUpper = smaBbUpperRef.current
-    const smaBbLower = smaBbLowerRef.current
-    const candles = candlesRef.current
-    if (!smaMa || !smaSmoothing || !smaBbUpper || !smaBbLower) {
-      return
-    }
-
-    const visible = indicatorVisibility.sma
-    smaMa.applyOptions({ visible, title: `SMA ${smaSettings.length}` })
-    smaSmoothing.applyOptions({ visible: visible && smaSettings.smoothingType !== 'None' })
-    const showBands = visible && smaSettings.smoothingType === 'SMA + Bollinger Bands'
-    smaBbUpper.applyOptions({ visible: showBands })
-    smaBbLower.applyOptions({ visible: showBands })
+    applyLine(ma1, maRibbonSettings.ma1)
+    applyLine(ma2, maRibbonSettings.ma2)
 
     if (!visible || candles.length === 0) {
       if (!visible) {
-        smaMa.setData([])
-        smaSmoothing.setData([])
-        smaBbUpper.setData([])
-        smaBbLower.setData([])
+        ma1.setData([])
+        ma2.setData([])
       }
       return
     }
 
-    paintSmaOverlay(
-      { ma: smaMa, smoothing: smaSmoothing, bbUpper: smaBbUpper, bbLower: smaBbLower },
-      candles,
-      smaSettings,
-    )
-  }, [smaSettings, chartReady, indicatorVisibility])
+    paintMaRibbon({ ma1, ma2 }, candles, maRibbonSettings)
+  }, [maRibbonSettings, chartReady, indicatorVisibility])
+
+  useEffect(() => {
+    const upper = dcUpperRef.current
+    const lower = dcLowerRef.current
+    const basis = dcBasisRef.current
+    const fill = dcFillRef.current
+    const candles = candlesRef.current
+    if (!upper || !lower || !basis || !fill) {
+      return
+    }
+
+    const visible = indicatorVisibility.dc
+    upper.applyOptions({ visible })
+    lower.applyOptions({ visible })
+    basis.applyOptions({ visible, title: `DC ${dcSettings.length}` })
+
+    if (!visible || candles.length === 0) {
+      if (!visible) {
+        upper.setData([])
+        lower.setData([])
+        basis.setData([])
+        fill.setBands([])
+      }
+      return
+    }
+
+    paintDonchianOverlay({ upper, lower, basis, fill }, candles, dcSettings)
+  }, [dcSettings, chartReady, indicatorVisibility])
 
   useEffect(() => {
     countdownRef.current?.setTimeframe(timeframe)
   }, [timeframe, chartReady])
 
   useEffect(() => {
-    if (settingsOpen === 'rsi') {
-      setDraftRsiSettings(rsiSettings)
+    if (settingsOpen === 'maRibbon') {
+      setDraftMaRibbonSettings(maRibbonSettings)
     }
-    if (settingsOpen === 'la_nwe') {
-      setDraftLaNweSettings(la_nweSettings)
-    }
-    if (settingsOpen === 'cipherB') {
-      setDraftCipherSettings(cipherSettings)
-    }
-    if (settingsOpen === 'macd') {
-      setDraftTvMacdSettings(tvMacdSettings)
-    }
-    if (settingsOpen === 'cmMacd') {
-      setDraftMacdSettings(macdSettings)
-    }
-    if (settingsOpen === 'sma') {
-      setDraftSmaSettings(smaSettings)
+    if (settingsOpen === 'dc') {
+      setDraftDcSettings(dcSettings)
     }
   }, [settingsOpen, settingsTick])
-
-  useEffect(() => {
-    const la_nweVisible = indicatorVisibility.la_nwe
-    la_nweUpperRef.current?.applyOptions({ visible: la_nweVisible })
-    la_nweLowerRef.current?.applyOptions({ visible: la_nweVisible })
-
-    const candles = candlesRef.current
-    const la_nweMarkers = la_nweMarkersRef.current
-    if (!la_nweMarkers) {
-      return
-    }
-
-    if (!la_nweVisible) {
-      la_nweMarkers.setMarkers([])
-      return
-    }
-
-    if (candles.length === 0) {
-      return
-    }
-
-    const result = calculateLaNwe(candles, la_nweSettingsRef.current)
-    la_nweMarkers.setMarkers(
-      result.crosses.map((cross) =>
-        cross.direction === 'down'
-          ? {
-              time: cross.time as UTCTimestamp,
-              price: cross.price,
-              direction: 'down',
-              color: '#f23645',
-            }
-          : {
-              time: cross.time as UTCTimestamp,
-              price: cross.price,
-              direction: 'up',
-              color: '#00897b',
-            },
-      ),
-    )
-  }, [indicatorVisibility, chartReady])
-
-  const updateDraftSetting = (key: keyof RsiSettings, value: string) => {
-    setDraftRsiSettings((current) => ({
-      ...current,
-      [key]: Number(value),
-    }))
-  }
-
-  const updateDraftLaNweSetting = (key: 'bandwidth' | 'multiplier' | 'lookback', value: string) => {
-    setDraftLaNweSettings((current) => ({
-      ...current,
-      [key]: Number(value),
-    }))
-  }
-
-  const updateDraftCipherSetting = (key: keyof CipherBSettings, value: string) => {
-    setDraftCipherSettings((current) => ({
-      ...current,
-      [key]: Number(value),
-    }))
-  }
-
-  const updateDraftMacdNumber = (
-    key: 'fastLength' | 'slowLength' | 'signalLength',
-    value: string,
-  ) => {
-    setDraftMacdSettings((current) => ({
-      ...current,
-      [key]: Number(value),
-    }))
-  }
 
   const toggleSettings = (indicator: IndicatorId) => {
     onSettingsOpenChange(settingsOpen === indicator ? null : indicator)
   }
 
-  const openRsiSettings = () => {
-    setDraftRsiSettings(rsiSettings)
-    toggleSettings('rsi')
+  const openMaRibbonSettings = () => {
+    setDraftMaRibbonSettings(maRibbonSettings)
+    toggleSettings('maRibbon')
   }
 
-  const openLaNweSettings = () => {
-    setDraftLaNweSettings(la_nweSettings)
-    toggleSettings('la_nwe')
-  }
-
-  const openCipherSettings = () => {
-    setDraftCipherSettings(cipherSettings)
-    toggleSettings('cipherB')
-  }
-
-  const openTvMacdSettings = () => {
-    setDraftTvMacdSettings(tvMacdSettings)
-    toggleSettings('macd')
-  }
-
-  const openMacdSettings = () => {
-    setDraftMacdSettings(macdSettings)
-    toggleSettings('cmMacd')
-  }
-
-  const openSmaSettings = () => {
-    setDraftSmaSettings(smaSettings)
-    toggleSettings('sma')
+  const openDcSettings = () => {
+    setDraftDcSettings(dcSettings)
+    toggleSettings('dc')
   }
 
   const applySettings = () => {
-    if (settingsOpen === 'rsi') {
-      const next = normalizeRsiSettings(draftRsiSettings)
-      setDraftRsiSettings(next)
-      setRsiSettings(next)
+    if (settingsOpen === 'maRibbon') {
+      const next = normalizeMaRibbonSettings(draftMaRibbonSettings)
+      setDraftMaRibbonSettings(next)
+      setMaRibbonSettings(next)
     }
-    if (settingsOpen === 'la_nwe') {
-      const next = normalizeLaNweSettings(draftLaNweSettings)
-      setDraftLaNweSettings(next)
-      setLaNweSettings(next)
-    }
-    if (settingsOpen === 'cipherB') {
-      const next = normalizeCipherBSettings(draftCipherSettings)
-      setDraftCipherSettings(next)
-      setCipherSettings(next)
-    }
-    if (settingsOpen === 'macd') {
-      const next = normalizeTvMacdSettings(draftTvMacdSettings)
-      setDraftTvMacdSettings(next)
-      setTvMacdSettings(next)
-    }
-    if (settingsOpen === 'cmMacd') {
-      const next = normalizeCmMacdSettings(draftMacdSettings)
-      setDraftMacdSettings(next)
-      setMacdSettings(next)
-    }
-    if (settingsOpen === 'sma') {
-      const next = normalizeSmaSettings(draftSmaSettings)
-      setDraftSmaSettings(next)
-      setSmaSettings(next)
+    if (settingsOpen === 'dc') {
+      const next = normalizeDcSettings(draftDcSettings)
+      setDraftDcSettings(next)
+      setDcSettings(next)
     }
     onSettingsOpenChange(null)
   }
 
   const resetSettings = () => {
-    if (settingsOpen === 'rsi') {
-      setDraftRsiSettings(DEFAULT_RSI_SETTINGS)
+    if (settingsOpen === 'maRibbon') {
+      setDraftMaRibbonSettings(DEFAULT_MA_RIBBON_SETTINGS)
     }
-    if (settingsOpen === 'la_nwe') {
-      setDraftLaNweSettings(DEFAULT_LA_NWE_SETTINGS)
+    if (settingsOpen === 'dc') {
+      setDraftDcSettings(DEFAULT_DC_SETTINGS)
     }
-    if (settingsOpen === 'cipherB') {
-      setDraftCipherSettings(DEFAULT_CIPHER_B_SETTINGS)
-    }
-    if (settingsOpen === 'macd') {
-      setDraftTvMacdSettings(DEFAULT_TV_MACD_SETTINGS)
-    }
-    if (settingsOpen === 'cmMacd') {
-      setDraftMacdSettings(DEFAULT_CM_MACD_SETTINGS)
-    }
-    if (settingsOpen === 'sma') {
-      setDraftSmaSettings(DEFAULT_SMA_SETTINGS)
-    }
-  }
-
-  const oscillatorStack = (id: 'rsi' | 'cipherB' | 'macd' | 'cmMacd') => {
-    const order = ['rsi', 'cipherB', 'macd', 'cmMacd'] as const
-    const start = order.indexOf(id)
-    return order.slice(start + 1).filter((item) => indicatorVisibility[item]).length
-  }
-
-  const oscillatorStackClass = (count: number) => {
-    if (count >= 3) {
-      return 'candle-chart__indicator-gear--stack-3'
-    }
-    if (count === 2) {
-      return 'candle-chart__indicator-gear--stack-2'
-    }
-    if (count === 1) {
-      return 'candle-chart__indicator-gear--stack-1'
-    }
-    return ''
   }
 
   const hoverStats = hoverCandle ? candleChange(hoverCandle, candlesRef.current) : null
-  const hoverSma =
-    hoverCandle && indicatorVisibility.sma
-      ? calculateSma(candlesRef.current, smaSettings).find((point) => point.time === hoverCandle.time)
+  const hoverMa =
+    hoverCandle && indicatorVisibility.maRibbon
+      ? {
+          ma1: maRibbonSettings.ma1.show
+            ? calculateMa(candlesRef.current, maRibbonSettings.ma1).find((point) => point.time === hoverCandle.time)
+            : null,
+          ma2: maRibbonSettings.ma2.show
+            ? calculateMa(candlesRef.current, maRibbonSettings.ma2).find((point) => point.time === hoverCandle.time)
+            : null,
+        }
+      : null
+  const hoverDc =
+    hoverCandle && indicatorVisibility.dc
+      ? calculateDonchian(candlesRef.current, dcSettings).find((point) => point.time === hoverCandle.time)
       : null
 
   return (
@@ -2223,9 +972,24 @@ export function CandleChart({
               ) : null}
             </span>
           ) : null}
-          {hoverSma ? (
-            <span className="candle-chart__legend-sma">
-              SMA {smaSettings.length} <strong>{formatLastPrice(hoverSma.sma)}</strong>
+          {hoverMa?.ma1 ? (
+            <span className="candle-chart__legend-ma">
+              MA {maRibbonSettings.ma1.length}{' '}
+              <strong style={{ color: maRibbonSettings.ma1.color }}>{formatLastPrice(hoverMa.ma1.value)}</strong>
+            </span>
+          ) : null}
+          {hoverMa?.ma2 ? (
+            <span className="candle-chart__legend-ma">
+              MA {maRibbonSettings.ma2.length}{' '}
+              <strong style={{ color: maRibbonSettings.ma2.color }}>{formatLastPrice(hoverMa.ma2.value)}</strong>
+            </span>
+          ) : null}
+          {hoverDc ? (
+            <span className="candle-chart__legend-dc">
+              DC {dcSettings.length}{' '}
+              <strong className="is-upper">{formatLastPrice(hoverDc.upper)}</strong>
+              <strong className="is-basis">{formatLastPrice(hoverDc.basis)}</strong>
+              <strong className="is-lower">{formatLastPrice(hoverDc.lower)}</strong>
             </span>
           ) : null}
         </div>
@@ -2298,252 +1062,74 @@ export function CandleChart({
             <span>Loading chart...</span>
           </div>
         ) : null}
-        {indicatorVisibility.sma ? (
+        {indicatorVisibility.maRibbon ? (
           <button
             type="button"
-            className="candle-chart__indicator-gear candle-chart__indicator-gear--sma"
-            onClick={openSmaSettings}
-            aria-label="SMA settings"
-            title="SMA settings"
+            className="candle-chart__indicator-gear candle-chart__indicator-gear--ma-ribbon"
+            onClick={openMaRibbonSettings}
+            aria-label="MA ribbon settings"
+            title="MA ribbon settings"
           >
             ⚙
           </button>
         ) : null}
-        {indicatorVisibility.la_nwe ? (
+        {indicatorVisibility.dc ? (
           <button
             type="button"
             className={
-              indicatorVisibility.sma
-                ? 'candle-chart__indicator-gear candle-chart__indicator-gear--la_nwe candle-chart__indicator-gear--la_nwe-below-sma'
-                : 'candle-chart__indicator-gear candle-chart__indicator-gear--la_nwe'
+              indicatorVisibility.maRibbon
+                ? 'candle-chart__indicator-gear candle-chart__indicator-gear--dc candle-chart__indicator-gear--dc-below-ma-ribbon'
+                : 'candle-chart__indicator-gear candle-chart__indicator-gear--dc'
             }
-            onClick={openLaNweSettings}
-            aria-label="Nadaraya-Watson Envelope settings"
-            title="Nadaraya-Watson Envelope settings"
+            onClick={openDcSettings}
+            aria-label="Donchian Channels settings"
+            title="Donchian Channels settings"
           >
             ⚙
           </button>
         ) : null}
-        {indicatorVisibility.rsi ? (
-          <button
-            type="button"
-            className={[
-              'candle-chart__indicator-gear',
-              'candle-chart__indicator-gear--rsi',
-              oscillatorStackClass(oscillatorStack('rsi')),
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            onClick={openRsiSettings}
-            aria-label="Better RSI settings"
-            title="Better RSI settings"
-          >
-            ⚙
-          </button>
+        {settingsOpen === 'maRibbon' ? (
+          <div className="candle-chart__settings candle-chart__settings--ma-ribbon">
+            <p className="candle-chart__settings-title">MA ribbon</p>
+            <MaLineFields
+              label="MA #1"
+              line={draftMaRibbonSettings.ma1}
+              onChange={(line) => setDraftMaRibbonSettings((current) => ({ ...current, ma1: line }))}
+            />
+            <MaLineFields
+              label="MA #2"
+              line={draftMaRibbonSettings.ma2}
+              onChange={(line) => setDraftMaRibbonSettings((current) => ({ ...current, ma2: line }))}
+            />
+            <div className="candle-chart__settings-actions">
+              <button type="button" className="candle-chart__settings-button" onClick={resetSettings}>
+                Defaults
+              </button>
+              <button type="button" className="candle-chart__settings-button" onClick={() => onSettingsOpenChange(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="candle-chart__settings-button candle-chart__settings-button--primary"
+                onClick={applySettings}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
         ) : null}
-        {indicatorVisibility.cipherB ? (
-          <button
-            type="button"
-            className={[
-              'candle-chart__indicator-gear',
-              'candle-chart__indicator-gear--cipher',
-              oscillatorStackClass(oscillatorStack('cipherB')),
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            onClick={openCipherSettings}
-            aria-label="Cipher_B_free settings"
-            title="Cipher_B_free settings"
-          >
-            ⚙
-          </button>
-        ) : null}
-        {indicatorVisibility.macd ? (
-          <button
-            type="button"
-            className={[
-              'candle-chart__indicator-gear',
-              'candle-chart__indicator-gear--tv-macd',
-              oscillatorStackClass(oscillatorStack('macd')),
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            onClick={openTvMacdSettings}
-            aria-label="MACD settings"
-            title="MACD settings"
-          >
-            ⚙
-          </button>
-        ) : null}
-        {indicatorVisibility.cmMacd ? (
-          <button
-            type="button"
-            className="candle-chart__indicator-gear candle-chart__indicator-gear--macd"
-            onClick={openMacdSettings}
-            aria-label="CM_Ult_MacD_MTF settings"
-            title="CM_Ult_MacD_MTF settings"
-          >
-            ⚙
-          </button>
-        ) : null}
-        {settingsOpen === 'rsi' ? (
-          <div className="candle-chart__settings candle-chart__settings--rsi">
-            <p className="candle-chart__settings-title">Better RSI</p>
+        {settingsOpen === 'dc' ? (
+          <div className="candle-chart__settings candle-chart__settings--dc">
+            <p className="candle-chart__settings-title">Donchian Channels</p>
             <div className="candle-chart__settings-grid">
               <label>
                 <span>Length</span>
                 <input
                   type="number"
                   min="1"
-                  value={draftRsiSettings.length}
-                  onChange={(event) => updateDraftSetting('length', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Outer high</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={draftRsiSettings.outerHigh}
-                  onChange={(event) => updateDraftSetting('outerHigh', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Upper band</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={draftRsiSettings.upperBand}
-                  onChange={(event) => updateDraftSetting('upperBand', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Midline</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={draftRsiSettings.midline}
-                  onChange={(event) => updateDraftSetting('midline', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Lower band</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={draftRsiSettings.lowerBand}
-                  onChange={(event) => updateDraftSetting('lowerBand', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Outer low</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={draftRsiSettings.outerLow}
-                  onChange={(event) => updateDraftSetting('outerLow', event.target.value)}
-                />
-              </label>
-            </div>
-            <div className="candle-chart__settings-actions">
-              <button type="button" className="candle-chart__settings-button" onClick={resetSettings}>
-                Defaults
-              </button>
-              <button type="button" className="candle-chart__settings-button" onClick={() => onSettingsOpenChange(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="candle-chart__settings-button candle-chart__settings-button--primary"
-                onClick={applySettings}
-              >
-                Apply
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {settingsOpen === 'la_nwe' ? (
-          <div className="candle-chart__settings candle-chart__settings--la_nwe">
-            <p className="candle-chart__settings-title">Nadaraya-Watson Envelope</p>
-            <div className="candle-chart__settings-grid">
-              <label>
-                <span>Bandwidth</span>
-                <input
-                  type="number"
-                  min="0.1"
-                  step="0.1"
-                  value={draftLaNweSettings.bandwidth}
-                  onChange={(event) => updateDraftLaNweSetting('bandwidth', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Multiplier</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={draftLaNweSettings.multiplier}
-                  onChange={(event) => updateDraftLaNweSetting('multiplier', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Lookback</span>
-                <input
-                  type="number"
-                  min="2"
-                  max="2000"
-                  value={draftLaNweSettings.lookback}
-                  onChange={(event) => updateDraftLaNweSetting('lookback', event.target.value)}
-                />
-              </label>
-              <label className="candle-chart__settings-check">
-                <span>Repainting smoothing</span>
-                <input
-                  type="checkbox"
-                  checked={draftLaNweSettings.repaint}
+                  value={draftDcSettings.length}
                   onChange={(event) =>
-                    setDraftLaNweSettings((current) => ({
-                      ...current,
-                      repaint: event.target.checked,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-            <div className="candle-chart__settings-actions">
-              <button type="button" className="candle-chart__settings-button" onClick={resetSettings}>
-                Defaults
-              </button>
-              <button type="button" className="candle-chart__settings-button" onClick={() => onSettingsOpenChange(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="candle-chart__settings-button candle-chart__settings-button--primary"
-                onClick={applySettings}
-              >
-                Apply
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {settingsOpen === 'sma' ? (
-          <div className="candle-chart__settings candle-chart__settings--sma">
-            <p className="candle-chart__settings-title">SMA</p>
-            <div className="candle-chart__settings-grid">
-              <label>
-                <span>Candles</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={draftSmaSettings.length}
-                  onChange={(event) =>
-                    setDraftSmaSettings((current) => ({
+                    setDraftDcSettings((current) => ({
                       ...current,
                       length: Number(event.target.value),
                     }))
@@ -2551,420 +1137,16 @@ export function CandleChart({
                 />
               </label>
               <label>
-                <span>Source</span>
-                <select
-                  value={draftSmaSettings.source}
-                  onChange={(event) =>
-                    setDraftSmaSettings((current) => ({
-                      ...current,
-                      source: event.target.value as (typeof SMA_SOURCES)[number],
-                    }))
-                  }
-                >
-                  {SMA_SOURCES.map((source) => (
-                    <option key={source} value={source}>
-                      {source}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
                 <span>Offset</span>
                 <input
                   type="number"
                   min="-500"
                   max="500"
-                  value={draftSmaSettings.offset}
+                  value={draftDcSettings.offset}
                   onChange={(event) =>
-                    setDraftSmaSettings((current) => ({
+                    setDraftDcSettings((current) => ({
                       ...current,
                       offset: Number(event.target.value),
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Smoothing type</span>
-                <select
-                  value={draftSmaSettings.smoothingType}
-                  onChange={(event) =>
-                    setDraftSmaSettings((current) => ({
-                      ...current,
-                      smoothingType: event.target.value as (typeof SMA_SMOOTHING_TYPES)[number],
-                    }))
-                  }
-                >
-                  {SMA_SMOOTHING_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Smoothing length</span>
-                <input
-                  type="number"
-                  min="1"
-                  disabled={draftSmaSettings.smoothingType === 'None'}
-                  value={draftSmaSettings.smoothingLength}
-                  onChange={(event) =>
-                    setDraftSmaSettings((current) => ({
-                      ...current,
-                      smoothingLength: Number(event.target.value),
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                <span>BB StdDev</span>
-                <input
-                  type="number"
-                  min="0.001"
-                  max="50"
-                  step="0.5"
-                  disabled={draftSmaSettings.smoothingType !== 'SMA + Bollinger Bands'}
-                  value={draftSmaSettings.bbStdDev}
-                  onChange={(event) =>
-                    setDraftSmaSettings((current) => ({
-                      ...current,
-                      bbStdDev: Number(event.target.value),
-                    }))
-                  }
-                />
-              </label>
-            </div>
-            <div className="candle-chart__settings-actions">
-              <button type="button" className="candle-chart__settings-button" onClick={resetSettings}>
-                Defaults
-              </button>
-              <button type="button" className="candle-chart__settings-button" onClick={() => onSettingsOpenChange(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="candle-chart__settings-button candle-chart__settings-button--primary"
-                onClick={applySettings}
-              >
-                Apply
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {settingsOpen === 'cipherB' ? (
-          <div className="candle-chart__settings candle-chart__settings--cipher">
-            <p className="candle-chart__settings-title">Cipher_B_free</p>
-            <div className="candle-chart__settings-grid">
-              <label>
-                <span>Channel Length</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={draftCipherSettings.channelLength}
-                  onChange={(event) => updateDraftCipherSetting('channelLength', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Average Length</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={draftCipherSettings.averageLength}
-                  onChange={(event) => updateDraftCipherSetting('averageLength', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Over Bought 1</span>
-                <input
-                  type="number"
-                  value={draftCipherSettings.overbought1}
-                  onChange={(event) => updateDraftCipherSetting('overbought1', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Over Bought 2</span>
-                <input
-                  type="number"
-                  value={draftCipherSettings.overbought2}
-                  onChange={(event) => updateDraftCipherSetting('overbought2', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Over Sold 1</span>
-                <input
-                  type="number"
-                  value={draftCipherSettings.oversold1}
-                  onChange={(event) => updateDraftCipherSetting('oversold1', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Over Sold 2</span>
-                <input
-                  type="number"
-                  value={draftCipherSettings.oversold2}
-                  onChange={(event) => updateDraftCipherSetting('oversold2', event.target.value)}
-                />
-              </label>
-            </div>
-            <div className="candle-chart__settings-actions">
-              <button type="button" className="candle-chart__settings-button" onClick={resetSettings}>
-                Defaults
-              </button>
-              <button type="button" className="candle-chart__settings-button" onClick={() => onSettingsOpenChange(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="candle-chart__settings-button candle-chart__settings-button--primary"
-                onClick={applySettings}
-              >
-                Apply
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {settingsOpen === 'macd' ? (
-          <div className="candle-chart__settings candle-chart__settings--tv-macd">
-            <p className="candle-chart__settings-title">MACD</p>
-            <div className="candle-chart__settings-grid">
-              <label>
-                <span>Source</span>
-                <select
-                  value={draftTvMacdSettings.source}
-                  onChange={(event) =>
-                    setDraftTvMacdSettings((current) => ({
-                      ...current,
-                      source: event.target.value as (typeof SMA_SOURCES)[number],
-                    }))
-                  }
-                >
-                  {SMA_SOURCES.map((source) => (
-                    <option key={source} value={source}>
-                      {source}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Fast length</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={draftTvMacdSettings.fastLength}
-                  onChange={(event) =>
-                    setDraftTvMacdSettings((current) => ({
-                      ...current,
-                      fastLength: Number(event.target.value),
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Slow length</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={draftTvMacdSettings.slowLength}
-                  onChange={(event) =>
-                    setDraftTvMacdSettings((current) => ({
-                      ...current,
-                      slowLength: Number(event.target.value),
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Signal length</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={draftTvMacdSettings.signalLength}
-                  onChange={(event) =>
-                    setDraftTvMacdSettings((current) => ({
-                      ...current,
-                      signalLength: Number(event.target.value),
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Oscillator MA type</span>
-                <select
-                  value={draftTvMacdSettings.oscillatorType}
-                  onChange={(event) =>
-                    setDraftTvMacdSettings((current) => ({
-                      ...current,
-                      oscillatorType: event.target.value as (typeof TV_MACD_MA_TYPES)[number],
-                    }))
-                  }
-                >
-                  {TV_MACD_MA_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Signal MA type</span>
-                <select
-                  value={draftTvMacdSettings.signalType}
-                  onChange={(event) =>
-                    setDraftTvMacdSettings((current) => ({
-                      ...current,
-                      signalType: event.target.value as (typeof TV_MACD_MA_TYPES)[number],
-                    }))
-                  }
-                >
-                  {TV_MACD_MA_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="candle-chart__settings-actions">
-              <button type="button" className="candle-chart__settings-button" onClick={resetSettings}>
-                Defaults
-              </button>
-              <button type="button" className="candle-chart__settings-button" onClick={() => onSettingsOpenChange(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="candle-chart__settings-button candle-chart__settings-button--primary"
-                onClick={applySettings}
-              >
-                Apply
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {settingsOpen === 'cmMacd' ? (
-          <div className="candle-chart__settings candle-chart__settings--macd">
-            <p className="candle-chart__settings-title">CM_Ult_MacD_MTF</p>
-            <div className="candle-chart__settings-grid">
-              <label className="candle-chart__settings-check">
-                <span>Use Current Chart Resolution?</span>
-                <input
-                  type="checkbox"
-                  checked={draftMacdSettings.useCurrentRes}
-                  onChange={(event) =>
-                    setDraftMacdSettings((current) => ({
-                      ...current,
-                      useCurrentRes: event.target.checked,
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Use Different Timeframe?</span>
-                <select
-                  value={draftMacdSettings.resCustom}
-                  disabled={draftMacdSettings.useCurrentRes}
-                  onChange={(event) =>
-                    setDraftMacdSettings((current) => ({
-                      ...current,
-                      resCustom: event.target.value as TimeframeId,
-                    }))
-                  }
-                >
-                  {TIMEFRAMES.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Fast Length</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={draftMacdSettings.fastLength}
-                  onChange={(event) => updateDraftMacdNumber('fastLength', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Slow Length</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={draftMacdSettings.slowLength}
-                  onChange={(event) => updateDraftMacdNumber('slowLength', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>Signal Length</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={draftMacdSettings.signalLength}
-                  onChange={(event) => updateDraftMacdNumber('signalLength', event.target.value)}
-                />
-              </label>
-              <label className="candle-chart__settings-check">
-                <span>Show MacD & Signal Line?</span>
-                <input
-                  type="checkbox"
-                  checked={draftMacdSettings.showMacdSignal}
-                  onChange={(event) =>
-                    setDraftMacdSettings((current) => ({
-                      ...current,
-                      showMacdSignal: event.target.checked,
-                    }))
-                  }
-                />
-              </label>
-              <label className="candle-chart__settings-check">
-                <span>Show Dots When MacD Crosses Signal Line?</span>
-                <input
-                  type="checkbox"
-                  checked={draftMacdSettings.showDots}
-                  onChange={(event) =>
-                    setDraftMacdSettings((current) => ({
-                      ...current,
-                      showDots: event.target.checked,
-                    }))
-                  }
-                />
-              </label>
-              <label className="candle-chart__settings-check">
-                <span>Show Histogram?</span>
-                <input
-                  type="checkbox"
-                  checked={draftMacdSettings.showHistogram}
-                  onChange={(event) =>
-                    setDraftMacdSettings((current) => ({
-                      ...current,
-                      showHistogram: event.target.checked,
-                    }))
-                  }
-                />
-              </label>
-              <label className="candle-chart__settings-check">
-                <span>Change MacD Line Color-Signal Line Cross?</span>
-                <input
-                  type="checkbox"
-                  checked={draftMacdSettings.macdColorChange}
-                  onChange={(event) =>
-                    setDraftMacdSettings((current) => ({
-                      ...current,
-                      macdColorChange: event.target.checked,
-                    }))
-                  }
-                />
-              </label>
-              <label className="candle-chart__settings-check">
-                <span>MacD Histogram 4 Colors?</span>
-                <input
-                  type="checkbox"
-                  checked={draftMacdSettings.histColorChange}
-                  onChange={(event) =>
-                    setDraftMacdSettings((current) => ({
-                      ...current,
-                      histColorChange: event.target.checked,
                     }))
                   }
                 />
@@ -2994,24 +1176,6 @@ export function CandleChart({
             onClose={() => setSelectedId(null)}
           />
         ) : null}
-        {orderBox ? (
-          <OrderBoxModal drawing={orderBox} candles={loadedCandles} onClose={() => setOrderBox(null)} />
-        ) : null}
-        {backtestStrategy ? (
-          <BacktestModal
-            key={backtestStrategy}
-            candles={loadedCandles}
-            timeframe={timeframe}
-            onTimeframeChange={onTimeframeChange}
-            rewardRatio={rewardRatio}
-            onRewardRatioChange={onRewardRatioChange}
-            laNweSettings={la_nweSettings}
-            entries={strategyEntries}
-            strategyId={backtestStrategy}
-            dataMode={dataMode}
-            onClose={onBacktestClose}
-          />
-        ) : null}
         <div className="candle-chart__controls" aria-label="Chart controls">
           <button type="button" className="candle-chart__control" onClick={() => zoomRange(1.25)}>
             -
@@ -3037,6 +1201,18 @@ export function CandleChart({
         </div>
       </div>
       </div>
+      {backtestOpen ? (
+        <BacktestModal
+          candles={loadedCandles}
+          timeframe={timeframe}
+          onTimeframeChange={onTimeframeChange}
+          rewardRatio={smaDcRatio}
+          onRewardRatioChange={onSmaDcRatioChange}
+          maRibbonSettings={maRibbonSettings}
+          dataMode={dataMode}
+          onClose={onBacktestClose}
+        />
+      ) : null}
     </div>
   )
 }

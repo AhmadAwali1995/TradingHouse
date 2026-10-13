@@ -38,7 +38,7 @@ function loadFile(symbol: string): Promise<HistoryFile> {
   if (cached) {
     return cached
   }
-  const request = fetch(`/test-candles/${symbol}.json`).then(async (response) => {
+  const request = fetch(`/test-candles/${symbol}.json`, { cache: 'no-store' }).then(async (response) => {
     if (!response.ok) {
       throw new Error(`Test candles for ${symbol} were not found`)
     }

@@ -7,15 +7,6 @@ import {
   type IndicatorVisibility,
 } from './indicatorCatalog'
 import {
-  REWARD_RATIOS,
-  STRATEGY_ENTRY_OPTIONS,
-  STRATEGY_ITEMS,
-  type RewardRatio,
-  type StrategyEntrySettings,
-  type StrategyId,
-  type StrategyVisibility,
-} from './strategies'
-import {
   fetchPairTickers,
   formatChangePercent,
   formatLastPrice,
@@ -23,6 +14,7 @@ import {
   subscribeLiveTickers,
 } from './tickers'
 import { fetchTestTickers, isTestSymbol, type DataMode } from './testCandles'
+import type { SmaDcRatio } from './strategies/smaDc'
 import './Watchlist.css'
 
 export function Watchlist({
@@ -30,40 +22,33 @@ export function Watchlist({
   timeframe,
   selectedId,
   indicatorVisibility,
-  strategyVisibility,
-  strategyEntries,
-  rewardRatio,
   dataMode,
   settingsOpen,
   onSelect,
   onToggleIndicator,
-  onToggleStrategy,
-  onRewardRatioChange,
-  onToggleStrategyEntry,
-  onSetRsiEnhLevel,
-  onOpenBacktest,
   onOpenIndicatorSettings,
+  smaDcEnabled,
+  smaDcRatio,
+  onSmaDcEnabledChange,
+  onSmaDcRatioChange,
+  onOpenBacktest,
 }: {
   pairs: Pair[]
   timeframe: TimeframeId
   selectedId: string
   indicatorVisibility: IndicatorVisibility
-  strategyVisibility: StrategyVisibility
-  strategyEntries: StrategyEntrySettings
-  rewardRatio: RewardRatio
   dataMode: DataMode
   settingsOpen: IndicatorId | null
   onSelect: (pair: Pair) => void
   onToggleIndicator: (indicator: IndicatorId) => void
-  onToggleStrategy: (strategy: StrategyId) => void
-  onRewardRatioChange: (ratio: RewardRatio) => void
-  onToggleStrategyEntry: (strategy: StrategyId, entry: string) => void
-  onSetRsiEnhLevel: (level: 'entryLevel' | 'exitLevel', value: number) => void
-  onOpenBacktest: (strategy: StrategyId) => void
   onOpenIndicatorSettings: (indicator: IndicatorId) => void
+  smaDcEnabled: boolean
+  smaDcRatio: SmaDcRatio
+  onSmaDcEnabledChange: (enabled: boolean) => void
+  onSmaDcRatioChange: (ratio: SmaDcRatio) => void
+  onOpenBacktest: () => void
 }) {
   const [query, setQuery] = useState('')
-  const [strategySettings, setStrategySettings] = useState<StrategyId | null>(null)
   const [marketTab, setMarketTab] = useState<'crypto' | 'forex'>('crypto')
   const [sideTab, setSideTab] = useState<'indicators' | 'strategies'>('strategies')
   const [tickers, setTickers] = useState<Map<string, PairTicker>>(new Map())
@@ -377,172 +362,68 @@ export function Watchlist({
           id="watchlist-panel-strategies"
           aria-labelledby="watchlist-tab-strategies"
         >
-          {STRATEGY_ITEMS.map((strategy) => {
-            const visible = strategyVisibility[strategy.id]
-
-            const settingsVisible = strategySettings === strategy.id
-
-            return (
-              <div key={strategy.id} role="listitem">
-              <div className="tv-watchlist__indicator-row">
-                <span className="tv-watchlist__indicator-name">{strategy.label}</span>
-                <div className="tv-watchlist__indicator-actions">
-                  <button
-                    type="button"
-                    className={
-                      settingsVisible
-                        ? 'tv-watchlist__indicator-toggle is-active'
-                        : 'tv-watchlist__indicator-toggle'
-                    }
-                    aria-label={`${strategy.label} entry settings`}
-                    title={`${strategy.label} entry settings`}
-                    aria-pressed={settingsVisible}
-                    aria-expanded={settingsVisible}
-                    onClick={() => setStrategySettings(settingsVisible ? null : strategy.id)}
-                  >
-                    <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
-                      <path
-                        d="M8.2 2.6h3.6l.4 1.7c.4.1.8.3 1.1.6l1.6-.7 1.8 1.8-.7 1.6c.3.3.5.7.6 1.1l1.7.4v3.6l-1.7.4c-.1.4-.3.8-.6 1.1l.7 1.6-1.8 1.8-1.6-.7c-.3.3-.7.5-1.1.6l-.4 1.7H8.2l-.4-1.7c-.4-.1-.8-.3-1.1-.6l-1.6.7-1.8-1.8.7-1.6c-.3-.3-.5-.7-.6-1.1L1.7 11.8V8.2l1.7-.4c.1-.4.3-.8.6-1.1l-.7-1.6 1.8-1.8 1.6.7c.3-.3.7-.5 1.1-.6l.4-1.7Z"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.3"
-                        strokeLinejoin="round"
-                      />
-                      <circle cx="10" cy="10" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.3" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    className="tv-watchlist__backtest"
-                    onClick={() => onOpenBacktest(strategy.id)}
-                  >
-                    Backtest
-                  </button>
-                  <button
-                    type="button"
-                    className="tv-watchlist__indicator-toggle"
-                    aria-label={`${visible ? 'Hide' : 'Show'} ${strategy.label}`}
-                    aria-pressed={visible}
-                    onClick={() => onToggleStrategy(strategy.id)}
-                  >
-                    {visible ? (
-                      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
-                        <path
-                          d="M10 4c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3C17.5 13.9 14.2 17 10 17S2.5 13.9 1.2 11.1a1.5 1.5 0 0 1 0-1.3C2.5 7.1 5.8 4 10 4Z"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.4"
-                        />
-                        <circle cx="10" cy="10.5" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
-                        <path
-                          d="M3.2 3.2 16.8 16.8"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinecap="round"
-                        />
-                        <path
-                          d="M6.1 6.1A9.3 9.3 0 0 1 10 5c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3a10.5 10.5 0 0 1-3.2 3.7M8.1 15.2A9.5 9.5 0 0 1 10 16c-4.2 0-7.5-3.1-8.8-5.8a1.5 1.5 0 0 1 0-1.3A10.3 10.3 0 0 1 4 5.9"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.4"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                    )}
-                  </button>
-                </div>
+          <div className="tv-watchlist__indicator-row" role="listitem">
+            <span className="tv-watchlist__indicator-name">SMA_DC</span>
+            <div className="tv-watchlist__indicator-actions">
+              <div className="tv-watchlist__rrr" role="group" aria-label="SMA_DC reward to risk">
+                <button
+                  type="button"
+                  className={smaDcRatio === 2 ? 'is-active' : ''}
+                  aria-pressed={smaDcRatio === 2}
+                  onClick={() => onSmaDcRatioChange(2)}
+                >
+                  1:2
+                </button>
+                <button
+                  type="button"
+                  className={smaDcRatio === 3 ? 'is-active' : ''}
+                  aria-pressed={smaDcRatio === 3}
+                  onClick={() => onSmaDcRatioChange(3)}
+                >
+                  1:3
+                </button>
               </div>
-              </div>
-            )
-          })}
-          {strategySettings ? (
-            <div
-              className="tv-watchlist__popup-backdrop"
-              onMouseDown={() => setStrategySettings(null)}
-            >
-              <div
-                className="tv-watchlist__popup"
-                role="dialog"
-                aria-modal="true"
-                aria-label={`${STRATEGY_ITEMS.find((item) => item.id === strategySettings)?.label ?? 'Strategy'} settings`}
-                onMouseDown={(event) => event.stopPropagation()}
+              <button type="button" className="tv-watchlist__backtest" onClick={onOpenBacktest}>
+                Backtest
+              </button>
+              <button
+                type="button"
+                className="tv-watchlist__indicator-toggle"
+                aria-label={`${smaDcEnabled ? 'Hide' : 'Show'} SMA_DC`}
+                aria-pressed={smaDcEnabled}
+                onClick={() => onSmaDcEnabledChange(!smaDcEnabled)}
               >
-                <div className="tv-watchlist__popup-header">
-                  <h3>{STRATEGY_ITEMS.find((item) => item.id === strategySettings)?.label}</h3>
-                  <button type="button" className="tv-watchlist__popup-close" onClick={() => setStrategySettings(null)}>
-                    Close
-                  </button>
-                </div>
-                <div className="tv-watchlist__popup-section">
-                  <span>Reward to risk</span>
-                  <div className="tv-watchlist__ratio" role="radiogroup" aria-label="Reward to risk">
-                    {REWARD_RATIOS.map((ratio) => (
-                      <button
-                        key={ratio}
-                        type="button"
-                        className={
-                          rewardRatio === ratio
-                            ? 'tv-watchlist__ratio-button is-active'
-                            : 'tv-watchlist__ratio-button'
-                        }
-                        role="radio"
-                        aria-checked={rewardRatio === ratio}
-                        onClick={() => onRewardRatioChange(ratio)}
-                      >
-                        1:{ratio}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="tv-watchlist__strategy-settings">
-                  {STRATEGY_ENTRY_OPTIONS[strategySettings].map((option) => {
-                    const group = strategyEntries[strategySettings]
-                    const checked = Boolean(group[option.id as keyof typeof group])
-                    return (
-                      <label key={option.id} className="tv-watchlist__strategy-option">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => onToggleStrategyEntry(strategySettings, option.id)}
-                        />
-                        <span>{option.label}</span>
-                      </label>
-                    )
-                  })}
-                  {strategySettings === 'rsiEnh' ? (
-                    <div className="tv-watchlist__strategy-levels">
-                      <label>
-                        <span>Entry level</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="1"
-                          value={strategyEntries.rsiEnh.entryLevel}
-                          onChange={(event) => onSetRsiEnhLevel('entryLevel', Number(event.target.value))}
-                        />
-                      </label>
-                      <label>
-                        <span>Exit level</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="1"
-                          value={strategyEntries.rsiEnh.exitLevel}
-                          onChange={(event) => onSetRsiEnhLevel('exitLevel', Number(event.target.value))}
-                        />
-                      </label>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
+                {smaDcEnabled ? (
+                  <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+                    <path
+                      d="M10 4c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3C17.5 13.9 14.2 17 10 17S2.5 13.9 1.2 11.1a1.5 1.5 0 0 1 0-1.3C2.5 7.1 5.8 4 10 4Z"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                    />
+                    <circle cx="10" cy="10.5" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+                    <path
+                      d="M3.2 3.2 16.8 16.8"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M6.1 6.1A9.3 9.3 0 0 1 10 5c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3a10.5 10.5 0 0 1-3.2 3.7M8.1 15.2A9.5 9.5 0 0 1 10 16c-4.2 0-7.5-3.1-8.8-5.8a1.5 1.5 0 0 1 0-1.3A10.3 10.3 0 0 1 4 5.9"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                )}
+              </button>
             </div>
-          ) : null}
+          </div>
         </div>
         )}
       </div>

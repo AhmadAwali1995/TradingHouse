@@ -119,6 +119,17 @@ function monthsBefore(months: number): number {
   return date.getTime()
 }
 
+export function liveReportRange(timeframe: TimeframeId): CandleRange {
+  const start = new Date(monthsBefore(HISTORY_MONTHS[timeframe]))
+  start.setHours(0, 0, 0, 0)
+  const end = new Date()
+  end.setHours(23, 59, 59, 0)
+  return {
+    from: Math.floor(start.getTime() / 1000),
+    to: Math.floor(end.getTime() / 1000),
+  }
+}
+
 async function fetchKlinePages(
   pair: Pair,
   interval: string,

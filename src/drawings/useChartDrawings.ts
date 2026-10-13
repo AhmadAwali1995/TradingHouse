@@ -107,6 +107,7 @@ export function useChartDrawings({
   seriesRef,
   candlesRef,
   primitiveRef,
+  strategyDrawings = [],
 }: {
   chartReady: boolean
   pairId: string
@@ -114,6 +115,7 @@ export function useChartDrawings({
   seriesRef: MutableRefObject<ISeriesApi<'Candlestick'> | null>
   candlesRef: MutableRefObject<Candle[]>
   primitiveRef: MutableRefObject<DrawingPrimitive | null>
+  strategyDrawings?: Drawing[]
 }) {
   const [tool, setTool] = useState<DrawingTool | null>(null)
   const [draftPoints, setDraftPoints] = useState<ChartPoint[]>([])
@@ -203,14 +205,14 @@ export function useChartDrawings({
         ? positionLevels(activeTool === 'longPosition' ? 'long' : 'short', positionAnchor, candlesRef.current)
         : null
     primitiveRef.current?.setState({
-      drawings,
+      drawings: [...drawings.filter((drawing) => !drawing.id.startsWith('strategy-')), ...strategyDrawings],
       selectedId,
       hoveredId,
       preview: showPreview
         ? { tool: activeTool, points: previewPoints, hover: hoverPoint, barCount, position }
         : null,
     })
-  }, [drawings, selectedId, hoveredId, tool, draftPoints, hoverPoint, primitiveRef, candlesRef])
+  }, [drawings, strategyDrawings, selectedId, hoveredId, tool, draftPoints, hoverPoint, primitiveRef, candlesRef])
 
   useEffect(() => {
     const chart = chartRef.current

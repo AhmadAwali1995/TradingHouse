@@ -55,6 +55,7 @@
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .page-nav__button.is-active {

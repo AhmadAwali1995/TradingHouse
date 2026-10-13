@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { TIMEFRAMES, type Candle, type TimeframeId } from './candles'
-import type { LaNweSettings } from './indicators'
-import { runLuxAlgoBacktest, type BacktestResult } from './backtest/runBacktest'
-import { REWARD_RATIOS, STRATEGY_ITEMS, type RewardRatio, type StrategyEntrySettings, type StrategyId } from './strategies'
+import { runSmaDcBacktest, type BacktestResult } from './backtest/runBacktest'
+import type { MaRibbonSettings } from './indicators/maRibbon/maRibbon'
+import { type SmaDcRatio } from './strategies/smaDc'
 import { isTestTimeframe, type DataMode } from './testCandles'
 import './BacktestModal.css'
+
+const RATIOS = [2, 3] as const satisfies readonly SmaDcRatio[]
 
 function dateInputValue(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -89,20 +91,16 @@ export function BacktestModal({
   onTimeframeChange,
   rewardRatio,
   onRewardRatioChange,
-  laNweSettings,
-  entries,
-  strategyId,
+  maRibbonSettings,
   dataMode,
   onClose,
 }: {
   candles: Candle[]
   timeframe: TimeframeId
   onTimeframeChange: (timeframe: TimeframeId) => void
-  rewardRatio: RewardRatio
-  onRewardRatioChange: (ratio: RewardRatio) => void
-  laNweSettings: LaNweSettings
-  entries: StrategyEntrySettings
-  strategyId: StrategyId
+  rewardRatio: SmaDcRatio
+  onRewardRatioChange: (ratio: SmaDcRatio) => void
+  maRibbonSettings: MaRibbonSettings
   dataMode: DataMode
   onClose: () => void
 }) {
@@ -189,15 +187,13 @@ export function BacktestModal({
     }
     setError(null)
     setResult(
-      runLuxAlgoBacktest({
+      runSmaDcBacktest({
         candles,
         rewardRatio,
         from: fromTime,
         to: toTime,
         amount: invested,
-        strategyId,
-        laNweSettings,
-        entries,
+        maRibbonSettings,
       }),
     )
   }
@@ -212,9 +208,7 @@ export function BacktestModal({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="backtest__header">
-          <h2 id="backtest-title">
-            Backtest · {STRATEGY_ITEMS.find((strategy) => strategy.id === strategyId)?.label ?? 'Strategy'}
-          </h2>
+          <h2 id="backtest-title">Backtest · SMA_DC</h2>
           <button type="button" className="backtest__close" aria-label="Close" onClick={onClose}>
             ×
           </button>
@@ -222,10 +216,7 @@ export function BacktestModal({
         <div className="backtest__fields">
           <label>
             <span>Timeframe</span>
-            <select
-              value={timeframe}
-              onChange={(event) => onTimeframeChange(event.target.value as TimeframeId)}
-            >
+            <select value={timeframe} onChange={(event) => onTimeframeChange(event.target.value as TimeframeId)}>
               {TIMEFRAMES.map((item) => (
                 <option key={item.id} value={item.id} disabled={dataMode === 'test' && !isTestTimeframe(item.id)}>
                   {item.label}
@@ -268,18 +259,12 @@ export function BacktestModal({
           </label>
           <label className="backtest__amount">
             <span>Amount to invest</span>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-            />
+            <input type="number" min="0" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} />
           </label>
           <div className="backtest__ratio-field">
             <span>RRR</span>
             <div className="backtest__ratio" role="radiogroup" aria-label="Reward to risk">
-              {REWARD_RATIOS.map((ratio) => (
+              {RATIOS.map((ratio) => (
                 <button
                   key={ratio}
                   type="button"
@@ -324,9 +309,7 @@ export function BacktestModal({
               </div>
               <div>
                 <dt>Profit factor</dt>
-                <dd>
-                  {result.profitFactor === null ? (result.wins > 0 ? '∞' : '—') : result.profitFactor.toFixed(2)}
-                </dd>
+                <dd>{result.profitFactor === null ? (result.wins > 0 ? '∞' : '—') : result.profitFactor.toFixed(2)}</dd>
               </div>
               <div>
                 <dt>Max drawdown</dt>
@@ -336,9 +319,7 @@ export function BacktestModal({
               </div>
               <div>
                 <dt>Ending balance</dt>
-                <dd className={moneyClass(result.profit)}>
-                  {formatMoney(result.endingBalance)}
-                </dd>
+                <dd className={moneyClass(result.profit)}>{formatMoney(result.endingBalance)}</dd>
               </div>
             </dl>
             <div className="backtest__trades">
@@ -385,12 +366,7 @@ export function BacktestModal({
           <button type="button" className="backtest__button" onClick={onClose}>
             Close
           </button>
-          <button
-            type="button"
-            className="backtest__button backtest__button--primary"
-            onClick={submit}
-            disabled={candles.length === 0}
-          >
+          <button type="button" className="backtest__button backtest__button--primary" onClick={submit} disabled={candles.length === 0}>
             Run
           </button>
         </div>
