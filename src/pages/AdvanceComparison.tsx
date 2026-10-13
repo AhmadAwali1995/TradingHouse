@@ -1,21 +1,31 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Candle, TimeframeId } from '../candles'
 import type { Pair } from '../data/config'
-import { REWARD_RATIOS, STRATEGY_ITEMS, type RewardRatio, type StrategyEntrySettings } from '../strategies'
+import { DEFAULT_MA_RIBBON_SETTINGS } from '../indicators/maRibbon/maRibbon'
+import { runMaDcDynamicBacktest, runSmaDcBacktest } from '../backtest/runBacktest'
+import { type SmaDcRatio } from '../strategies/smaDc'
 import type { DataMode } from '../testCandles'
 import {
   formatMonth,
   formatSignedMoney,
   moneyClass,
+  monthBounds,
   monthsInCandles,
   reportPairs,
   reportTimeframes,
-  runStrategyMonth,
   statusCounts,
   useReportCandleMap,
 } from './report'
 import { ReportLoader } from './ReportLoader'
 import './report.css'
+
+const COMPARISON_STRATEGIES = [
+  { id: 'sma', label: 'MA_DC', requireAboveSlowMa: false, dynamic: false },
+  { id: 'maDcDynamic', label: 'MA_DC_dynamic', requireAboveSlowMa: false, dynamic: true },
+  { id: 'smaDc', label: 'SMA_DC', requireAboveSlowMa: true, dynamic: false },
+] as const
+
+const RATIOS = [2, 3] as const satisfies readonly SmaDcRatio[]
 
 type MonthRow = {
   month: string
@@ -58,19 +68,17 @@ export function AdvanceComparison({
   pairs,
   timeframe,
   dataMode,
-  entries,
   onTimeframeChange,
 }: {
   pairs: Pair[]
   timeframe: TimeframeId
   dataMode: DataMode
-  entries: StrategyEntrySettings
   onTimeframeChange: (timeframe: TimeframeId) => void
 }) {
   const availablePairs = useMemo(() => reportPairs(pairs, dataMode), [pairs, dataMode])
   const { candlesById, loading, error } = useReportCandleMap(availablePairs, timeframe, dataMode)
   const timeframes = reportTimeframes(dataMode)
-  const [ratio, setRatio] = useState<RewardRatio>(2)
+  const [ratio, setRatio] = useState<SmaDcRatio>(2)
   const [amount, setAmount] = useState('1000')
   const [blocks, setBlocks] = useState<ComparisonBlock[]>([])
   const [working, setWorking] = useState(true)
@@ -96,7 +104,7 @@ export function AdvanceComparison({
         if (cancelled) {
           return
         }
-        setBlocks(buildBlocks(availablePairs, candlesById, ratio, invested, entries))
+        setBlocks(buildBlocks(availablePairs, candlesById, ratio, invested))
         setWorking(false)
       }, 32)
     })
@@ -105,7 +113,7 @@ export function AdvanceComparison({
       window.cancelAnimationFrame(frame)
       window.clearTimeout(timer)
     }
-  }, [ready, loading, availablePairs, candlesById, ratio, invested, entries])
+  }, [ready, loading, availablePairs, candlesById, ratio, invested])
 
   const ordered = useMemo(() => {
     const direction = sortDir === 'asc' ? 1 : -1
@@ -136,7 +144,7 @@ export function AdvanceComparison({
           <input type="number" min="1" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} />
         </label>
         <div className="report__ratios" role="radiogroup" aria-label="Reward to risk">
-          {REWARD_RATIOS.map((item) => (
+          {RATIOS.map((item) => (
             <button
               key={item}
               type="button"
@@ -219,18 +227,35 @@ function sortValue(block: ComparisonBlock, sortKey: SortKey): number {
 function buildBlocks(
   pairs: Pair[],
   candlesById: Record<string, Candle[]>,
-  ratio: RewardRatio,
+  ratio: SmaDcRatio,
   invested: number,
-  entries: StrategyEntrySettings,
 ): ComparisonBlock[] {
-  return STRATEGY_ITEMS.flatMap((strategy) =>
+  return COMPARISON_STRATEGIES.flatMap((strategy) =>
     pairs.flatMap((pair) => {
       const candles = candlesById[pair.id] ?? []
       if (candles.length === 0) {
         return []
       }
       const rows = monthsInCandles(candles).map((month) => {
-        const result = runStrategyMonth(candles, month, strategy.id, ratio, invested, entries)
+        const range = monthBounds(month)
+        const result = strategy.dynamic
+          ? runMaDcDynamicBacktest({
+              candles,
+              rewardRatio: ratio,
+              from: range.from,
+              to: range.to,
+              amount: invested,
+              maRibbonSettings: DEFAULT_MA_RIBBON_SETTINGS,
+            })
+          : runSmaDcBacktest({
+              candles,
+              rewardRatio: ratio,
+              from: range.from,
+              to: range.to,
+              amount: invested,
+              maRibbonSettings: DEFAULT_MA_RIBBON_SETTINGS,
+              requireAboveSlowMa: strategy.requireAboveSlowMa,
+            })
         const counts = statusCounts(result)
         return {
           month,

@@ -13,6 +13,7 @@ import {
   type DrawingBase,
   type DrawingTool,
   type FibSettings,
+  type PositionDrawing,
 } from './types'
 
 function nextId(): string {
@@ -123,14 +124,20 @@ export function useChartDrawings({
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [drawingsByPair, setDrawingsByPair] = useState<Record<string, Drawing[]>>({})
+  const [orderBox, setOrderBox] = useState<PositionDrawing | null>(null)
 
   const drawings = drawingsByPair[pairId] ?? []
   const drawingsRef = useRef(drawings)
+  const strategyRef = useRef(strategyDrawings)
   const toolRef = useRef(tool)
   const draftRef = useRef(draftPoints)
   const selectedRef = useRef(selectedId)
   const dragRef = useRef<DragSession | null>(null)
+  const lastOrderClick = useRef<{ id: string; at: number } | null>(null)
+  const orderBoxRef = useRef(orderBox)
+  orderBoxRef.current = orderBox
   drawingsRef.current = drawings
+  strategyRef.current = strategyDrawings
   toolRef.current = tool
   draftRef.current = draftPoints
   selectedRef.current = selectedId
@@ -182,6 +189,7 @@ export function useChartDrawings({
     setHoverPoint(null)
     setHoveredId(null)
     setSelectedId(null)
+    setOrderBox(null)
   }, [pairId])
 
   useEffect(() => {
@@ -247,12 +255,17 @@ export function useChartDrawings({
       return { time, price }
     }
 
+    const visibleDrawings = () => [
+      ...drawingsRef.current.filter((drawing) => !drawing.id.startsWith('strategy-')),
+      ...strategyRef.current,
+    ]
+
     const hitAt = (x: number, y: number): DrawingHit | null => {
       const convert = primitiveRef.current?.converter()
       if (!convert) {
         return null
       }
-      return hitTestDrawing(drawingsRef.current, convert, x, y, selectedRef.current)
+      return hitTestDrawing(visibleDrawings(), convert, x, y, selectedRef.current)
     }
 
     let press: { x: number; y: number; point: ChartPoint | null; hit: DrawingHit | null } | null = null
@@ -308,8 +321,17 @@ export function useChartDrawings({
         return
       }
 
-      const snapshot = drawingsRef.current.find((drawing) => drawing.id === hit.id)
+      const snapshot = visibleDrawings().find((drawing) => drawing.id === hit.id)
       if (!snapshot) {
+        return
+      }
+      if (snapshot.id.startsWith('strategy-')) {
+        event.stopPropagation()
+        event.preventDefault()
+        setSelectedId(hit.id)
+        if (isPosition(snapshot.type)) {
+          blockPositionMenu = true
+        }
         return
       }
       event.stopPropagation()
@@ -398,7 +420,24 @@ export function useChartDrawings({
       }
 
       if (drag?.moved) {
+        lastOrderClick.current = null
         return
+      }
+
+      const clicked = pressPoint?.hit ? visibleDrawings().find((drawing) => drawing.id === pressPoint.hit?.id) : null
+      const clickMoved = Math.hypot(local.x - (pressPoint?.x ?? local.x), local.y - (pressPoint?.y ?? local.y)) > 5
+      if (
+        clicked &&
+        (clicked.type === 'longPosition' || clicked.type === 'shortPosition') &&
+        !clickMoved
+      ) {
+        const now = performance.now()
+        if (lastOrderClick.current?.id === clicked.id && now - lastOrderClick.current.at < 450) {
+          setOrderBox(clicked)
+          lastOrderClick.current = null
+        } else {
+          lastOrderClick.current = { id: clicked.id, at: now }
+        }
       }
 
       if (!pressPoint?.hit && Math.hypot(local.x - (pressPoint?.x ?? local.x), local.y - (pressPoint?.y ?? local.y)) < 5) {
@@ -450,6 +489,10 @@ export function useChartDrawings({
         return
       }
       if (event.key === 'Escape') {
+        if (orderBoxRef.current) {
+          setOrderBox(null)
+          return
+        }
         if (draftRef.current.length > 0) {
           setDraftPoints([])
           return
@@ -496,5 +539,7 @@ export function useChartDrawings({
     updateSelectedStyle,
     deleteSelected,
     clearDrawings,
+    orderBox,
+    closeOrderBox: () => setOrderBox(null),
   }
 }

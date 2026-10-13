@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { TIMEFRAMES, type Candle, type TimeframeId } from './candles'
-import { runSmaDcBacktest, type BacktestResult } from './backtest/runBacktest'
+import { runMaDcDynamicBacktest, runSmaDcBacktest, type BacktestResult } from './backtest/runBacktest'
+import { DEFAULT_DC_SETTINGS, type DcSettings } from './indicators/donchian/donchian'
 import type { MaRibbonSettings } from './indicators/maRibbon/maRibbon'
 import { type SmaDcRatio } from './strategies/smaDc'
 import { isTestTimeframe, type DataMode } from './testCandles'
@@ -89,18 +90,24 @@ export function BacktestModal({
   candles,
   timeframe,
   onTimeframeChange,
+  title,
   rewardRatio,
   onRewardRatioChange,
+  strategyKind,
   maRibbonSettings,
+  dcSettings = DEFAULT_DC_SETTINGS,
   dataMode,
   onClose,
 }: {
   candles: Candle[]
   timeframe: TimeframeId
   onTimeframeChange: (timeframe: TimeframeId) => void
+  title: string
   rewardRatio: SmaDcRatio
   onRewardRatioChange: (ratio: SmaDcRatio) => void
+  strategyKind: 'maDc' | 'smaDc' | 'maDcDynamic'
   maRibbonSettings: MaRibbonSettings
+  dcSettings?: DcSettings
   dataMode: DataMode
   onClose: () => void
 }) {
@@ -187,14 +194,26 @@ export function BacktestModal({
     }
     setError(null)
     setResult(
-      runSmaDcBacktest({
-        candles,
-        rewardRatio,
-        from: fromTime,
-        to: toTime,
-        amount: invested,
-        maRibbonSettings,
-      }),
+      strategyKind === 'maDcDynamic'
+        ? runMaDcDynamicBacktest({
+            candles,
+            rewardRatio,
+            from: fromTime,
+            to: toTime,
+            amount: invested,
+            maRibbonSettings,
+            dcSettings,
+          })
+        : runSmaDcBacktest({
+            candles,
+            rewardRatio,
+            from: fromTime,
+            to: toTime,
+            amount: invested,
+            maRibbonSettings,
+            dcSettings,
+            requireAboveSlowMa: strategyKind === 'smaDc',
+          }),
     )
   }
 
@@ -208,7 +227,7 @@ export function BacktestModal({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="backtest__header">
-          <h2 id="backtest-title">Backtest · SMA_DC</h2>
+          <h2 id="backtest-title">Backtest · {title}</h2>
           <button type="button" className="backtest__close" aria-label="Close" onClick={onClose}>
             ×
           </button>

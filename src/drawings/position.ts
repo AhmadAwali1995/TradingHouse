@@ -151,7 +151,19 @@ function realizedExit(
   trigger: PositionTrigger,
 ): { price: number; kind: 'target' | 'stop' | 'signal' } | null {
   const naturalExit = positionExitTime(drawing, bars)
-  if (drawing.id.startsWith('strategy-') && naturalExit !== null && drawing.endTime < naturalExit) {
+  if (drawing.exitKind === 'target') {
+    return { price: drawing.targetPrice, kind: 'target' }
+  }
+  const closedOnSignal =
+    drawing.id.startsWith('strategy-') &&
+    (drawing.signalExit === true || (naturalExit !== null && drawing.endTime < naturalExit))
+  if (closedOnSignal && drawing.exitKind === 'basis' && drawing.signalPrice !== undefined) {
+    return { price: drawing.signalPrice, kind: 'stop' }
+  }
+  if (closedOnSignal) {
+    if (drawing.signalPrice !== undefined) {
+      return { price: drawing.signalPrice, kind: 'signal' }
+    }
     const bar = bars.find((item) => item.time === drawing.endTime)
     if (bar?.close !== undefined) {
       return { price: bar.close, kind: 'signal' }

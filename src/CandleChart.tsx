@@ -45,9 +45,11 @@ import { DrawingPrimitive } from './drawings/DrawingPrimitive'
 import { DrawingToolbar } from './drawings/DrawingToolbar'
 import { DrawingStyleBar } from './drawings/DrawingStyleBar'
 import { FibSettingsPanel } from './drawings/FibSettingsPanel'
+import { OrderBoxModal } from './drawings/OrderBoxModal'
 import { useChartDrawings } from './drawings/useChartDrawings'
 import { BacktestModal } from './BacktestModal'
 import { LastPriceCountdownPrimitive } from './lastPriceCountdown'
+import { buildMaDcDynamicOrders } from './strategies/maDcDynamic'
 import { buildSmaDcOrders, type SmaDcRatio } from './strategies/smaDc'
 import { formatLastPrice } from './tickers'
 import './CandleChart.css'
@@ -349,10 +351,16 @@ export function CandleChart({
   dataMode,
   settingsOpen,
   settingsTick,
+  smaEnabled,
+  smaRatio,
   smaDcEnabled,
   smaDcRatio,
-  backtestOpen,
+  maDcDynamicEnabled,
+  maDcDynamicRatio,
+  backtestStrategy,
+  onSmaRatioChange,
   onSmaDcRatioChange,
+  onMaDcDynamicRatioChange,
   onBacktestClose,
   onTimeframeChange,
   onSettingsOpenChange,
@@ -363,10 +371,16 @@ export function CandleChart({
   dataMode: DataMode
   settingsOpen: IndicatorId | null
   settingsTick: number
+  smaEnabled: boolean
+  smaRatio: SmaDcRatio
   smaDcEnabled: boolean
   smaDcRatio: SmaDcRatio
-  backtestOpen: boolean
+  maDcDynamicEnabled: boolean
+  maDcDynamicRatio: SmaDcRatio
+  backtestStrategy: 'sma' | 'smaDc' | 'maDcDynamic' | null
+  onSmaRatioChange: (ratio: SmaDcRatio) => void
   onSmaDcRatioChange: (ratio: SmaDcRatio) => void
+  onMaDcDynamicRatioChange: (ratio: SmaDcRatio) => void
   onBacktestClose: () => void
   onTimeframeChange: (timeframe: TimeframeId) => void
   onSettingsOpenChange: (indicator: IndicatorId | null) => void
@@ -402,9 +416,21 @@ export function CandleChart({
   maRibbonSettingsRef.current = maRibbonSettings
   dcSettingsRef.current = dcSettings
 
+  const smaOrders = useMemo(
+    () => (smaEnabled ? buildSmaDcOrders(loadedCandles, maRibbonSettings, smaRatio, false, dcSettings) : []),
+    [smaEnabled, loadedCandles, maRibbonSettings, smaRatio, dcSettings],
+  )
   const smaDcOrders = useMemo(
-    () => (smaDcEnabled ? buildSmaDcOrders(loadedCandles, maRibbonSettings, smaDcRatio) : []),
-    [smaDcEnabled, loadedCandles, maRibbonSettings, smaDcRatio],
+    () => (smaDcEnabled ? buildSmaDcOrders(loadedCandles, maRibbonSettings, smaDcRatio, true, dcSettings) : []),
+    [smaDcEnabled, loadedCandles, maRibbonSettings, smaDcRatio, dcSettings],
+  )
+  const maDcDynamicOrders = useMemo(
+    () => (maDcDynamicEnabled ? buildMaDcDynamicOrders(loadedCandles, maRibbonSettings, maDcDynamicRatio, dcSettings) : []),
+    [maDcDynamicEnabled, loadedCandles, maRibbonSettings, maDcDynamicRatio, dcSettings],
+  )
+  const strategyDrawings = useMemo(
+    () => [...smaOrders, ...smaDcOrders, ...maDcDynamicOrders],
+    [smaOrders, smaDcOrders, maDcDynamicOrders],
   )
 
   const {
@@ -418,6 +444,8 @@ export function CandleChart({
     updateSelectedStyle,
     deleteSelected,
     clearDrawings,
+    orderBox,
+    closeOrderBox,
   } = useChartDrawings({
     chartReady,
     pairId: pair.id,
@@ -425,7 +453,7 @@ export function CandleChart({
     seriesRef,
     candlesRef,
     primitiveRef: drawingPrimitiveRef,
-    strategyDrawings: smaDcOrders,
+    strategyDrawings,
   })
 
   const shiftRange = (direction: -1 | 1) => {
@@ -1201,18 +1229,28 @@ export function CandleChart({
         </div>
       </div>
       </div>
-      {backtestOpen ? (
+      {backtestStrategy ? (
         <BacktestModal
           candles={loadedCandles}
           timeframe={timeframe}
           onTimeframeChange={onTimeframeChange}
-          rewardRatio={smaDcRatio}
-          onRewardRatioChange={onSmaDcRatioChange}
+          title={backtestStrategy === 'smaDc' ? 'SMA_DC' : backtestStrategy === 'maDcDynamic' ? 'MA_DC_dynamic' : 'MA_DC'}
+          rewardRatio={backtestStrategy === 'smaDc' ? smaDcRatio : backtestStrategy === 'maDcDynamic' ? maDcDynamicRatio : smaRatio}
+          onRewardRatioChange={
+            backtestStrategy === 'smaDc'
+              ? onSmaDcRatioChange
+              : backtestStrategy === 'maDcDynamic'
+                ? onMaDcDynamicRatioChange
+                : onSmaRatioChange
+          }
+          strategyKind={backtestStrategy === 'smaDc' ? 'smaDc' : backtestStrategy === 'maDcDynamic' ? 'maDcDynamic' : 'maDc'}
           maRibbonSettings={maRibbonSettings}
+          dcSettings={dcSettings}
           dataMode={dataMode}
           onClose={onBacktestClose}
         />
       ) : null}
+      {orderBox ? <OrderBoxModal drawing={orderBox} candles={loadedCandles} onClose={closeOrderBox} /> : null}
     </div>
   )
 }

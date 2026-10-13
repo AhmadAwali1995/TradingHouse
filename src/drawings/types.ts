@@ -88,6 +88,11 @@ export type PositionDrawing = DrawingBase & {
   accountSize: number
   riskPercent: number
   portion?: number
+  signalExit?: boolean
+  signalPrice?: number
+  exitKind?: 'trail' | 'basis' | 'target'
+  trailPrice?: number
+  trailFrom?: number
   mark?: string
 }
 

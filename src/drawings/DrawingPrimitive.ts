@@ -143,6 +143,21 @@ function drawPosition(
   ctx.lineTo(x + width, entryY)
   ctx.stroke()
 
+  if (drawing.trailPrice !== undefined) {
+    const trailY = convert.priceToY(drawing.trailPrice)
+    const trailStart = drawing.trailFrom === undefined ? left : convert.timeToX(drawing.trailFrom)
+    if (trailY !== null && trailStart !== null) {
+      ctx.strokeStyle = '#089981'
+      ctx.lineWidth = 1
+      ctx.setLineDash([4, 3])
+      ctx.beginPath()
+      ctx.moveTo(Math.max(x, Math.min(trailStart, x + width)), trailY)
+      ctx.lineTo(x + width, trailY)
+      ctx.stroke()
+      ctx.setLineDash([])
+    }
+  }
+
   if (!showLabels) {
     ctx.restore()
     return

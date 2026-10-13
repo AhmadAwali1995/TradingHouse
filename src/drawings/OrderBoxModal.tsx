@@ -33,9 +33,9 @@ export function OrderBoxModal({
   const long = drawing.type === 'longPosition'
   const trigger = positionTrigger(drawing, candles)
   const naturalExit = positionExitTime(drawing, candles)
-  const signalExit = naturalExit !== null && drawing.endTime < naturalExit
+  const signalExit = drawing.signalExit === true || (naturalExit !== null && drawing.endTime < naturalExit)
   const exitPrice = signalExit
-    ? candles.find((candle) => candle.time === drawing.endTime)?.close
+    ? (drawing.signalPrice ?? candles.find((candle) => candle.time === drawing.endTime)?.close)
     : trigger === 'target'
       ? drawing.targetPrice
       : trigger === 'stop'
@@ -48,13 +48,24 @@ export function OrderBoxModal({
   const risk = long ? longRiskPercent(drawing.entryPrice, drawing.stopPrice) : null
   const riskDist = Math.abs(drawing.entryPrice - drawing.stopPrice)
   const reward = riskDist > 0 ? Math.abs(drawing.targetPrice - drawing.entryPrice) / riskDist : null
-  const status = signalExit ? 'Signal' : trigger === 'target' ? 'Take profit' : trigger === 'stop' ? 'Stop loss' : 'Open'
+  const status = signalExit
+    ? drawing.exitKind === 'basis'
+      ? 'Stop loss'
+      : drawing.signalPrice === undefined
+        ? 'Signal'
+        : 'Close line'
+    : trigger === 'target'
+      ? 'Take profit'
+      : trigger === 'stop'
+        ? 'Stop loss'
+        : 'Open'
   const rows = [
     ...(drawing.mark ? [['Condition', drawing.mark]] : []),
     ['Status', status],
     ['Entry', price(drawing.entryPrice)],
     ['Stop', price(drawing.stopPrice)],
     ['Target', price(drawing.targetPrice)],
+    ...(drawing.trailPrice === undefined ? [] : [['Close line', price(drawing.trailPrice)]]),
     ['Risk', risk === null ? '—' : `${risk.toFixed(2)}%`],
     ['Reward', reward === null ? '—' : `1:${reward.toFixed(2)}`],
     ['P&L', profit === null ? '—' : money(profit)],

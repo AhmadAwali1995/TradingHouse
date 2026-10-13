@@ -1,7 +1,8 @@
 import type { Candle } from '../candles'
-import { calculateMa, type MaRibbonSettings } from '../indicators/maRibbon/maRibbon'
 import { DEFAULT_ACCOUNT_SIZE } from '../drawings/position'
 import type { PositionDrawing } from '../drawings/types'
+import { DEFAULT_DC_SETTINGS, calculateDonchian, type DcSettings } from '../indicators/donchian/donchian'
+import { calculateMa, type MaRibbonSettings } from '../indicators/maRibbon/maRibbon'
 
 export type SmaDcRatio = 2 | 3
 
@@ -11,20 +12,36 @@ export function buildSmaDcOrders(
   candles: Candle[],
   settings: MaRibbonSettings,
   rewardRatio: SmaDcRatio,
+  requireAboveSlowMa: boolean,
+  dcSettings: DcSettings = DEFAULT_DC_SETTINGS,
 ): PositionDrawing[] {
   const smaByTime = new Map(calculateMa(candles, settings.ma1).map((point) => [point.time, point.value]))
+  const basisByTime = new Map(calculateDonchian(candles, dcSettings).map((point) => [point.time, point.basis]))
+  const slowByTime = requireAboveSlowMa
+    ? new Map(calculateMa(candles, settings.ma2).map((point) => [point.time, point.value]))
+    : null
   const orders: PositionDrawing[] = []
   let flatAfter = -1
+  const idPrefix = requireAboveSlowMa ? 'strategy-sma-dc' : 'strategy-ma-dc'
+  const label = requireAboveSlowMa ? 'SMA_DC' : 'MA_DC'
 
   for (let index = 1; index < candles.length; index += 1) {
     const previous = candles[index - 1]
     const candle = candles[index]
-    const previousSma = smaByTime.get(previous.time)
-    const sma = smaByTime.get(candle.time)
-    if (previousSma === undefined || sma === undefined || candle.time <= flatAfter) {
+    const previousBasis = basisByTime.get(previous.time)
+    const basis = basisByTime.get(candle.time)
+    const ma = smaByTime.get(candle.time)
+    const slow = slowByTime?.get(candle.time)
+    if (previousBasis === undefined || basis === undefined || ma === undefined || candle.time <= flatAfter) {
       continue
     }
-    if (!(previous.close <= previousSma && candle.close > sma)) {
+    if (requireAboveSlowMa && slow === undefined) {
+      continue
+    }
+    const crossedMiddle = previous.close <= previousBasis && candle.close > basis
+    const aboveMa = candle.close > ma
+    const aboveSlow = !requireAboveSlowMa || (slow !== undefined && candle.low > slow)
+    if (!crossedMiddle || !aboveMa || !aboveSlow) {
       continue
     }
 
@@ -43,7 +60,7 @@ export function buildSmaDcOrders(
 
     flatAfter = endTime
     orders.push({
-      id: `strategy-sma-dc-${candle.time}`,
+      id: `${idPrefix}-${candle.time}`,
       type: 'longPosition',
       color: '#d1d4dc',
       lineWidth: 1,
@@ -56,7 +73,7 @@ export function buildSmaDcOrders(
       stopPrice: stop,
       accountSize: DEFAULT_ACCOUNT_SIZE,
       riskPercent: SMA_DC_RISK_PERCENT,
-      mark: `SMA_DC 1:${rewardRatio}`,
+      mark: `${label} 1:${rewardRatio}`,
     })
   }
 

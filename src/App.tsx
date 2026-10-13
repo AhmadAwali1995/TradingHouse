@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CandleChart } from './CandleChart'
+import { AdvanceComparison } from './pages/AdvanceComparison'
 import { Watchlist } from './Watchlist'
 import type { TimeframeId } from './candles'
 import { DEFAULT_PAIR, PAIRS } from './data/config'
@@ -8,11 +9,22 @@ import type { SmaDcRatio } from './strategies/smaDc'
 import { isTestSymbol, isTestTimeframe, type DataMode } from './testCandles'
 import './App.css'
 
-function readDataMode(): DataMode {
-  return new URLSearchParams(window.location.search).get('mode') === 'test' ? 'test' : 'live'
+type PageId = 'chart' | 'advance'
+
+function pageFromPath(pathname: string): PageId | null {
+  const name = pathname.replace(/\/+$/, '').split('/').filter(Boolean).at(-1) ?? ''
+  return name === 'advance' ? 'advance' : null
 }
 
-function modeHref(mode: DataMode): string {
+function readAppLocation(): { page: PageId; mode: DataMode } {
+  const params = new URLSearchParams(window.location.search)
+  return {
+    page: pageFromPath(window.location.pathname) ?? (params.get('page') === 'advance' ? 'advance' : 'chart'),
+    mode: params.get('mode') === 'test' ? 'test' : 'live',
+  }
+}
+
+function appLocationHref(page: PageId, mode: DataMode): string {
   const params = new URLSearchParams(window.location.search)
   params.delete('page')
   if (mode === 'live') {
@@ -20,8 +32,9 @@ function modeHref(mode: DataMode): string {
   } else {
     params.set('mode', mode)
   }
+  const path = page === 'chart' ? '/' : '/advance/'
   const search = params.toString()
-  return `/${search ? `?${search}` : ''}${window.location.hash}`
+  return `${path}${search ? `?${search}` : ''}${window.location.hash}`
 }
 
 function App() {
@@ -33,21 +46,30 @@ function App() {
     maRibbon: false,
     dc: false,
   })
-  const [smaDcEnabled, setSmaDcEnabled] = useState(true)
+  const [smaEnabled, setSmaEnabled] = useState(false)
+  const [smaRatio, setSmaRatio] = useState<SmaDcRatio>(2)
+  const [smaDcEnabled, setSmaDcEnabled] = useState(false)
   const [smaDcRatio, setSmaDcRatio] = useState<SmaDcRatio>(2)
-  const [backtestOpen, setBacktestOpen] = useState(false)
-  const [dataMode, setDataMode] = useState<DataMode>(readDataMode)
+  const [maDcDynamicEnabled, setMaDcDynamicEnabled] = useState(false)
+  const [maDcDynamicRatio, setMaDcDynamicRatio] = useState<SmaDcRatio>(2)
+  const [backtestStrategy, setBacktestStrategy] = useState<'sma' | 'smaDc' | 'maDcDynamic' | null>(null)
+  const [dataMode, setDataMode] = useState<DataMode>(() => readAppLocation().mode)
+  const [page, setPage] = useState<PageId>(() => readAppLocation().page)
 
   useEffect(() => {
-    const next = modeHref(dataMode)
+    const next = appLocationHref(page, dataMode)
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`
     if (next !== current) {
       window.history.pushState(null, '', next)
     }
-  }, [dataMode])
+  }, [page, dataMode])
 
   useEffect(() => {
-    const onPopState = () => setDataMode(readDataMode())
+    const onPopState = () => {
+      const next = readAppLocation()
+      setPage(next.page)
+      setDataMode(next.mode)
+    }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
@@ -98,8 +120,34 @@ function App() {
             Test
           </button>
         </div>
+        <nav className="page-nav" aria-label="Pages">
+          <button
+            type="button"
+            className={page === 'chart' ? 'page-nav__button is-active' : 'page-nav__button'}
+            aria-pressed={page === 'chart'}
+            onClick={() => setPage('chart')}
+          >
+            Chart
+          </button>
+          <button
+            type="button"
+            className={page === 'advance' ? 'page-nav__button is-active' : 'page-nav__button'}
+            aria-pressed={page === 'advance'}
+            onClick={() => setPage('advance')}
+          >
+            Advance comparison
+          </button>
+        </nav>
       </header>
-      <main className="workspace">
+      {page === 'advance' ? (
+        <AdvanceComparison
+          pairs={PAIRS}
+          timeframe={timeframe}
+          dataMode={dataMode}
+          onTimeframeChange={setTimeframe}
+        />
+      ) : null}
+      <main className={page === 'chart' ? 'workspace' : 'workspace is-hidden'}>
         <section className="chart">
           <CandleChart
             pair={pair}
@@ -108,11 +156,17 @@ function App() {
             dataMode={dataMode}
             settingsOpen={settingsOpen}
             settingsTick={settingsTick}
+            smaEnabled={smaEnabled}
+            smaRatio={smaRatio}
             smaDcEnabled={smaDcEnabled}
             smaDcRatio={smaDcRatio}
-            backtestOpen={backtestOpen}
+            maDcDynamicEnabled={maDcDynamicEnabled}
+            maDcDynamicRatio={maDcDynamicRatio}
+            backtestStrategy={backtestStrategy}
+            onSmaRatioChange={setSmaRatio}
             onSmaDcRatioChange={setSmaDcRatio}
-            onBacktestClose={() => setBacktestOpen(false)}
+            onMaDcDynamicRatioChange={setMaDcDynamicRatio}
+            onBacktestClose={() => setBacktestStrategy(null)}
             onTimeframeChange={setTimeframe}
             onSettingsOpenChange={setSettingsOpen}
           />
@@ -133,11 +187,19 @@ function App() {
               }))
             }
             onOpenIndicatorSettings={openIndicatorSettings}
+            smaEnabled={smaEnabled}
+            smaRatio={smaRatio}
             smaDcEnabled={smaDcEnabled}
             smaDcRatio={smaDcRatio}
+            maDcDynamicEnabled={maDcDynamicEnabled}
+            maDcDynamicRatio={maDcDynamicRatio}
+            onSmaEnabledChange={setSmaEnabled}
+            onSmaRatioChange={setSmaRatio}
             onSmaDcEnabledChange={setSmaDcEnabled}
             onSmaDcRatioChange={setSmaDcRatio}
-            onOpenBacktest={() => setBacktestOpen(true)}
+            onMaDcDynamicEnabledChange={setMaDcDynamicEnabled}
+            onMaDcDynamicRatioChange={setMaDcDynamicRatio}
+            onOpenBacktest={setBacktestStrategy}
           />
         </aside>
       </main>

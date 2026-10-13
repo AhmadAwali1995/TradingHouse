@@ -17,6 +17,89 @@ import { fetchTestTickers, isTestSymbol, type DataMode } from './testCandles'
 import type { SmaDcRatio } from './strategies/smaDc'
 import './Watchlist.css'
 
+const SMA_TIP = 'Long when price crosses the Donchian middle line from below while above MA 20. Stop loses 0.5% of the balance. Target is 1% at 1:2, or 1.5% at 1:3.'
+const MA_DC_DYNAMIC_TIP = 'Long when price crosses the Donchian middle line from below while above MA 20. Stop closes the order when price crosses that middle line from above. Target is 1% at 1:2, or 1.5% at 1:3. After price touches the Donchian upper line, a close line trails 0.15% under the highest price and closes the order if price falls back to it.'
+const SMA_DC_TIP = 'Long when price crosses the Donchian middle line from below while above MA 20, and the candle low is above MA 200. Stop loses 0.5% of the balance. Target is 1% at 1:2, or 1.5% at 1:3.'
+
+function StrategyEye({ shown }: { shown: boolean }) {
+  if (shown) {
+    return (
+      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+        <path
+          d="M10 4c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3C17.5 13.9 14.2 17 10 17S2.5 13.9 1.2 11.1a1.5 1.5 0 0 1 0-1.3C2.5 7.1 5.8 4 10 4Z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+        />
+        <circle cx="10" cy="10.5" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      </svg>
+    )
+  }
+  return (
+    <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+      <path d="M3.2 3.2 16.8 16.8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path
+        d="M6.1 6.1A9.3 9.3 0 0 1 10 5c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3a10.5 10.5 0 0 1-3.2 3.7M8.1 15.2A9.5 9.5 0 0 1 10 16c-4.2 0-7.5-3.1-8.8-5.8a1.5 1.5 0 0 1 0-1.3A10.3 10.3 0 0 1 4 5.9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function StrategyRow({
+  name,
+  tip,
+  enabled,
+  ratio,
+  onEnabledChange,
+  onRatioChange,
+  onOpenBacktest,
+}: {
+  name: string
+  tip: string
+  enabled: boolean
+  ratio: SmaDcRatio
+  onEnabledChange: (enabled: boolean) => void
+  onRatioChange: (ratio: SmaDcRatio) => void
+  onOpenBacktest: () => void
+}) {
+  return (
+    <div className="tv-watchlist__indicator-row" role="listitem">
+      <span className="tv-watchlist__strategy-name" tabIndex={0}>
+        {name}
+        <span className="tv-watchlist__strategy-tip" role="tooltip">
+          {tip}
+        </span>
+      </span>
+      <div className="tv-watchlist__indicator-actions">
+        <div className="tv-watchlist__rrr" role="group" aria-label={`${name} reward to risk`}>
+          <button type="button" className={ratio === 2 ? 'is-active' : ''} aria-pressed={ratio === 2} onClick={() => onRatioChange(2)}>
+            1:2
+          </button>
+          <button type="button" className={ratio === 3 ? 'is-active' : ''} aria-pressed={ratio === 3} onClick={() => onRatioChange(3)}>
+            1:3
+          </button>
+        </div>
+        <button type="button" className="tv-watchlist__backtest" onClick={onOpenBacktest}>
+          Backtest
+        </button>
+        <button
+          type="button"
+          className="tv-watchlist__indicator-toggle"
+          aria-label={`${enabled ? 'Hide' : 'Show'} ${name}`}
+          aria-pressed={enabled}
+          onClick={() => onEnabledChange(!enabled)}
+        >
+          <StrategyEye shown={enabled} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function Watchlist({
   pairs,
   timeframe,
@@ -27,10 +110,18 @@ export function Watchlist({
   onSelect,
   onToggleIndicator,
   onOpenIndicatorSettings,
+  smaEnabled,
+  smaRatio,
   smaDcEnabled,
   smaDcRatio,
+  maDcDynamicEnabled,
+  maDcDynamicRatio,
+  onSmaEnabledChange,
+  onSmaRatioChange,
   onSmaDcEnabledChange,
   onSmaDcRatioChange,
+  onMaDcDynamicEnabledChange,
+  onMaDcDynamicRatioChange,
   onOpenBacktest,
 }: {
   pairs: Pair[]
@@ -42,11 +133,19 @@ export function Watchlist({
   onSelect: (pair: Pair) => void
   onToggleIndicator: (indicator: IndicatorId) => void
   onOpenIndicatorSettings: (indicator: IndicatorId) => void
+  smaEnabled: boolean
+  smaRatio: SmaDcRatio
   smaDcEnabled: boolean
   smaDcRatio: SmaDcRatio
+  maDcDynamicEnabled: boolean
+  maDcDynamicRatio: SmaDcRatio
+  onSmaEnabledChange: (enabled: boolean) => void
+  onSmaRatioChange: (ratio: SmaDcRatio) => void
   onSmaDcEnabledChange: (enabled: boolean) => void
   onSmaDcRatioChange: (ratio: SmaDcRatio) => void
-  onOpenBacktest: () => void
+  onMaDcDynamicEnabledChange: (enabled: boolean) => void
+  onMaDcDynamicRatioChange: (ratio: SmaDcRatio) => void
+  onOpenBacktest: (strategy: 'sma' | 'smaDc' | 'maDcDynamic') => void
 }) {
   const [query, setQuery] = useState('')
   const [marketTab, setMarketTab] = useState<'crypto' | 'forex'>('crypto')
@@ -362,68 +461,33 @@ export function Watchlist({
           id="watchlist-panel-strategies"
           aria-labelledby="watchlist-tab-strategies"
         >
-          <div className="tv-watchlist__indicator-row" role="listitem">
-            <span className="tv-watchlist__indicator-name">SMA_DC</span>
-            <div className="tv-watchlist__indicator-actions">
-              <div className="tv-watchlist__rrr" role="group" aria-label="SMA_DC reward to risk">
-                <button
-                  type="button"
-                  className={smaDcRatio === 2 ? 'is-active' : ''}
-                  aria-pressed={smaDcRatio === 2}
-                  onClick={() => onSmaDcRatioChange(2)}
-                >
-                  1:2
-                </button>
-                <button
-                  type="button"
-                  className={smaDcRatio === 3 ? 'is-active' : ''}
-                  aria-pressed={smaDcRatio === 3}
-                  onClick={() => onSmaDcRatioChange(3)}
-                >
-                  1:3
-                </button>
-              </div>
-              <button type="button" className="tv-watchlist__backtest" onClick={onOpenBacktest}>
-                Backtest
-              </button>
-              <button
-                type="button"
-                className="tv-watchlist__indicator-toggle"
-                aria-label={`${smaDcEnabled ? 'Hide' : 'Show'} SMA_DC`}
-                aria-pressed={smaDcEnabled}
-                onClick={() => onSmaDcEnabledChange(!smaDcEnabled)}
-              >
-                {smaDcEnabled ? (
-                  <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
-                    <path
-                      d="M10 4c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3C17.5 13.9 14.2 17 10 17S2.5 13.9 1.2 11.1a1.5 1.5 0 0 1 0-1.3C2.5 7.1 5.8 4 10 4Z"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.4"
-                    />
-                    <circle cx="10" cy="10.5" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
-                    <path
-                      d="M3.2 3.2 16.8 16.8"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.6"
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M6.1 6.1A9.3 9.3 0 0 1 10 5c4.2 0 7.5 3.1 8.8 5.8.2.4.2.9 0 1.3a10.5 10.5 0 0 1-3.2 3.7M8.1 15.2A9.5 9.5 0 0 1 10 16c-4.2 0-7.5-3.1-8.8-5.8a1.5 1.5 0 0 1 0-1.3A10.3 10.3 0 0 1 4 5.9"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.4"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                )}
-              </button>
-            </div>
-          </div>
+          <StrategyRow
+            name="MA_DC_dynamic"
+            tip={MA_DC_DYNAMIC_TIP}
+            enabled={maDcDynamicEnabled}
+            ratio={maDcDynamicRatio}
+            onEnabledChange={onMaDcDynamicEnabledChange}
+            onRatioChange={onMaDcDynamicRatioChange}
+            onOpenBacktest={() => onOpenBacktest('maDcDynamic')}
+          />
+          <StrategyRow
+            name="MA_DC"
+            tip={SMA_TIP}
+            enabled={smaEnabled}
+            ratio={smaRatio}
+            onEnabledChange={onSmaEnabledChange}
+            onRatioChange={onSmaRatioChange}
+            onOpenBacktest={() => onOpenBacktest('sma')}
+          />
+          <StrategyRow
+            name="SMA_DC"
+            tip={SMA_DC_TIP}
+            enabled={smaDcEnabled}
+            ratio={smaDcRatio}
+            onEnabledChange={onSmaDcEnabledChange}
+            onRatioChange={onSmaDcRatioChange}
+            onOpenBacktest={() => onOpenBacktest('smaDc')}
+          />
         </div>
         )}
       </div>
